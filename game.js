@@ -1,4 +1,4 @@
-// Pelea de Seguidores - Sincronización original + mejoras solicitadas
+// Pelea de Seguidores - Modificado según indicaciones de usuario
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -24,15 +24,7 @@ let players = [];
 let playerConfig = [];
 let gameSize = {w:1360, h:800};
 
-let globalSpeed = 0.36; // velocidad aumentada
-
-// --- ÁREA DEL RECTÁNGULO DE JUEGO (solo visual) ---
-const centralArea = {
-  x: 260,
-  y: 80,
-  w: 920,
-  h: 640
-};
+let globalSpeed = 0.74; // VELOCIDAD MÁS ALTA
 
 // --- UI ---
 document.getElementById("botsCount").addEventListener("change", e => {
@@ -40,7 +32,7 @@ document.getElementById("botsCount").addEventListener("change", e => {
   updatePlayerList();
 });
 speedInput.addEventListener("change", e => {
-  globalSpeed = Math.max(0.05, parseFloat(e.target.value) || 0.36);
+  globalSpeed = Math.max(0.05, parseFloat(e.target.value) || 0.74);
 });
 function setBotImage() {
   const fileInput = document.getElementById('botImageFile');
@@ -58,7 +50,7 @@ function setBotImage() {
   }
 }
 
-// --- Sincronización original: obtiene avatares desde GitHub (como antes) ---
+// --- Sincronización original ---
 async function fetchAvatarsFromGitHub() {
   const apiUrl = "https://api.github.com/repos/peleadeseguidores/peleadeseguidores-game-web/contents/images";
   const res = await fetch(apiUrl, { headers: { "Accept": "application/vnd.github.v3+json" } });
@@ -129,7 +121,7 @@ function showMenu() {
   running = false;
 }
 
-// --- PREVIEW --- (visual)
+// --- PREVIEW ---
 function showPreview() {
   let allPlayers = [...playerConfig];
   if (botsCount > 0 && botImageDataURL) {
@@ -256,7 +248,7 @@ class Player {
   }
 
   growTo(newSize) {
-    this.size += (newSize - this.size) * 0.10;
+    this.size += (newSize - this.size) * 0.12;
     this.targetSize = newSize;
   }
 
@@ -296,21 +288,59 @@ class Player {
     ctx.stroke();
     ctx.restore();
 
-    // Barra de vida verde-rojo como la imagen
+    // --- Barra de vida fina, redondeada ---
     let barWidth = this.size * 0.84;
-    let barHeight = 7;
+    let barHeight = 4; // Más fino
     let barX = this.x - barWidth/2;
     let barY = this.y - this.size/2 - barHeight - 5;
     let percent = Math.max(0, Math.min(1, this.health/this.maxHealth));
+
+    // Fondo negro
+    ctx.save();
+    ctx.beginPath();
+    // Rectángulo redondeado:
+    const r = barHeight/2;
+    ctx.moveTo(barX+r, barY);
+    ctx.lineTo(barX+barWidth-r, barY);
+    ctx.arc(barX+barWidth-r, barY+r, r, -Math.PI/2, Math.PI/2);
+    ctx.lineTo(barX+r, barY+barHeight);
+    ctx.arc(barX+r, barY+r, r, Math.PI/2, 3*Math.PI/2);
+    ctx.closePath();
     ctx.fillStyle = "#111";
-    ctx.fillRect(barX, barY, barWidth, barHeight);
-    ctx.fillStyle = "#25ff25";
-    ctx.fillRect(barX, barY, barWidth*percent, barHeight);
-    ctx.fillStyle = "#ff2222";
-    ctx.fillRect(barX+barWidth*percent, barY, barWidth*(1-percent), barHeight);
+    ctx.fill();
+
+    // Barra verde (vida actual)
+    if (percent > 0) {
+      ctx.beginPath();
+      ctx.moveTo(barX+r, barY);
+      ctx.lineTo(barX+barWidth*percent-r, barY);
+      ctx.arc(barX+barWidth*percent-r, barY+r, r, -Math.PI/2, Math.PI/2);
+      ctx.lineTo(barX+r, barY+barHeight);
+      ctx.arc(barX+r, barY+r, r, Math.PI/2, 3*Math.PI/2);
+      ctx.closePath();
+      ctx.fillStyle = "#25ff25";
+      ctx.fill();
+    }
+
+    // Barra roja (vida perdida)
+    if (percent < 1) {
+      ctx.beginPath();
+      let startX = barX+barWidth*percent;
+      ctx.moveTo(startX+r, barY);
+      ctx.lineTo(barX+barWidth-r, barY);
+      ctx.arc(barX+barWidth-r, barY+r, r, -Math.PI/2, Math.PI/2);
+      ctx.lineTo(startX+r, barY+barHeight);
+      ctx.arc(startX+r, barY+r, r, Math.PI/2, 3*Math.PI/2);
+      ctx.closePath();
+      ctx.fillStyle = "#ff2222";
+      ctx.fill();
+    }
+
+    // Borde blanco
     ctx.strokeStyle = "#fff";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(barX, barY, barWidth, barHeight);
+    ctx.lineWidth = 1.1;
+    ctx.stroke();
+    ctx.restore();
   }
 }
 
@@ -344,7 +374,6 @@ function handleCollisions() {
         p2.health -= p2.isBot ? 0.18 : 0.017;
       }
     }
-    // Rebote en todo el canvas
     if(players[i].x-players[i].size/2 < 0){ players[i].x = players[i].size/2; players[i].vx = Math.abs(players[i].vx) || 0.1; }
     if(players[i].x+players[i].size/2 > gameSize.w){ players[i].x = gameSize.w-players[i].size/2; players[i].vx = -Math.abs(players[i].vx) || -0.1; }
     if(players[i].y-players[i].size/2 < 0){ players[i].y = players[i].size/2; players[i].vy = Math.abs(players[i].vy) || 0.1; }
@@ -359,16 +388,7 @@ function gameLoop(ts){
   lastTime = ts;
   ctx.clearRect(0,0,gameSize.w,gameSize.h);
 
-  // Dibuja solo un rectángulo visual para el área de juego (no afecta movimiento)
-  ctx.save();
-  ctx.strokeStyle = "#FFD700";
-  ctx.lineWidth = 4;
-  ctx.globalAlpha = 0.13;
-  ctx.fillStyle = "#222";
-  ctx.fillRect(centralArea.x, centralArea.y, centralArea.w, centralArea.h);
-  ctx.globalAlpha = 0.6;
-  ctx.strokeRect(centralArea.x, centralArea.y, centralArea.w, centralArea.h);
-  ctx.restore();
+  // **Rectángulo amarillo eliminado**
 
   for(let p of players){
     p.move();
@@ -376,11 +396,11 @@ function gameLoop(ts){
   }
   handleCollisions();
 
-  // Vivos: texto más chico y muestra jugadores + bots
+  // Vivos: solo muestra el número actual
   ctx.font = "21px Segoe UI, Arial, sans-serif";
   ctx.fillStyle = "#FFD700";
   ctx.textAlign = "left";
-  ctx.fillText(`Vivos: ${players.length} / ${playerConfig.length + botsCount}`, 32, 38);
+  ctx.fillText(`Vivos: ${players.length}`, 32, 38);
 
   if(running !== false && players.length>1){
     requestAnimationFrame(gameLoop);
