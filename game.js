@@ -1,11 +1,10 @@
-// Pelea de Seguidores - Modificado según indicaciones de usuario
+// Pelea de Seguidores - Rectángulo removido, control de vidas y velocidad, tamaño dinámico
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 const playerListDiv = document.getElementById("player-list");
-const leftInfoDiv = document.getElementById("left-info");
-const leaderboardDiv = document.getElementById("leaderboard");
 const speedInput = document.getElementById("speedInput");
+const livesInput = document.getElementById("livesInput");
 
 let mainMenu = document.getElementById("main-menu");
 let gameScreen = document.getElementById("game-screen");
@@ -14,7 +13,6 @@ let previewCanvas = document.getElementById("preview-canvas");
 let previewCtx = previewCanvas.getContext("2d");
 let previewLabel = document.getElementById("preview-label");
 let botsCount = 0;
-let botImageBlobUrl = null;
 let botImageDataURL = null;
 let syncStatus = document.getElementById("status-sync");
 let running = false;
@@ -24,9 +22,11 @@ let players = [];
 let playerConfig = [];
 let gameSize = {w:1360, h:800};
 
-let globalSpeed = 0.74; // VELOCIDAD MÁS ALTA
+// --- CONTROL GLOBAL ---
+let globalSpeed = parseFloat(speedInput.value) || 0.74; // velocidad inicial
+let globalLives = 8;
 
-// --- UI ---
+// --- UI listeners ---
 document.getElementById("botsCount").addEventListener("change", e => {
   botsCount = Math.max(0, parseInt(e.target.value) || 0);
   updatePlayerList();
@@ -34,12 +34,15 @@ document.getElementById("botsCount").addEventListener("change", e => {
 speedInput.addEventListener("change", e => {
   globalSpeed = Math.max(0.05, parseFloat(e.target.value) || 0.74);
 });
+livesInput.addEventListener("change", e => {
+  globalLives = Math.max(1, parseInt(e.target.value) || 8);
+  updatePlayerList();
+});
 function setBotImage() {
   const fileInput = document.getElementById('botImageFile');
   if (fileInput.files && fileInput.files[0]) {
     const reader = new FileReader();
     reader.onload = function(e) {
-      botImageBlobUrl = e.target.result;
       botImageDataURL = e.target.result;
       alert('Imagen para bots cargada ✔️');
       updatePlayerList();
@@ -60,7 +63,7 @@ async function fetchAvatarsFromGitHub() {
     .map(f => ({
       name: f.name.replace(/\.[^/.]+$/, ""),
       image: f.download_url,
-      health: 8,
+      health: globalLives,
       isBot: false,
     }));
   return avatars;
@@ -78,7 +81,7 @@ function updatePlayerList() {
   let allPlayers = [...playerConfig];
   if (botsCount > 0 && botImageDataURL) {
     for(let i=0; i<botsCount; i++) {
-      allPlayers.push({name:"Bot-"+(i+1), image:botImageDataURL, health:8, isBot:true});
+      allPlayers.push({name:"Bot-"+(i+1), image:botImageDataURL, health:globalLives, isBot:true});
     }
   }
   html += `<div style="max-height:350px;overflow-y:auto;">`;
@@ -96,11 +99,12 @@ function updatePlayerList() {
 function editHealth(idx,val) {
   let allPlayers = [...playerConfig];
   if (botsCount > 0 && botImageDataURL) {
-    for(let i=0; i<botsCount; i++) allPlayers.push({name:"Bot-"+(i+1), image:botImageDataURL, health:8, isBot:true});
+    for(let i=0; i<botsCount; i++) allPlayers.push({name:"Bot-"+(i+1), image:botImageDataURL, health:globalLives, isBot:true});
   }
-  val = Math.max(1,Math.min(99,parseInt(val)||8));
+  val = Math.max(1,Math.min(99,parseInt(val)||globalLives));
   if (allPlayers[idx]) {
     if (idx < playerConfig.length) playerConfig[idx].health = val;
+    else globalLives = val; // actualiza global para bots si editan bots
     updatePlayerList();
   }
 }
@@ -121,12 +125,11 @@ function showMenu() {
   running = false;
 }
 
-// --- PREVIEW ---
 function showPreview() {
   let allPlayers = [...playerConfig];
   if (botsCount > 0 && botImageDataURL) {
     for(let i=0; i<botsCount; i++) {
-      allPlayers.push({name:"Bot-"+(i+1), image:botImageDataURL, health:8, isBot:true});
+      allPlayers.push({name:"Bot-"+(i+1), image:botImageDataURL, health:globalLives, isBot:true});
     }
   }
   previewDiv.style.display = "flex";
@@ -181,14 +184,13 @@ function startGame() {
   let allPlayers = [...playerConfig];
   if (botsCount > 0 && botImageDataURL) {
     for(let i=0; i<botsCount; i++) {
-      allPlayers.push({name:"Bot-"+(i+1), image:botImageDataURL, health:8, isBot:true});
+      allPlayers.push({name:"Bot-"+(i+1), image:botImageDataURL, health:globalLives, isBot:true});
     }
   }
   let N = allPlayers.length;
   let minSize = 18;
   players = [];
   let positions = [];
-  // Posiciones iniciales aleatorias en TODO el canvas
   for(let i=0; i<N; i++) {
     let placed = false;
     let attempts = 0;
@@ -218,7 +220,6 @@ function startGame() {
   }
   mainMenu.style.display = "none";
   gameScreen.style.display = "block";
-  leaderboardDiv.style.display = "none";
   winner = null;
   lastTime = performance.now();
   running = true;
@@ -233,8 +234,8 @@ class Player {
     this.isBot = obj.isBot || false;
     this.size = size;
     this.targetSize = size;
-    this.health = obj.isBot ? 0.2 + Math.random()*0.3 : (obj.health || 8); // bots: menos vida
-    this.maxHealth = obj.isBot ? 1 : (obj.health || 8);
+    this.health = obj.health || globalLives;
+    this.maxHealth = obj.health || globalLives;
     this.img = new Image();
     this.imgLoaded = false;
     this.img.src = this.imageUrl || '';
@@ -248,7 +249,7 @@ class Player {
   }
 
   growTo(newSize) {
-    this.size += (newSize - this.size) * 0.12;
+    this.size += (newSize - this.size) * 0.14;
     this.targetSize = newSize;
   }
 
@@ -290,15 +291,12 @@ class Player {
 
     // --- Barra de vida fina, redondeada ---
     let barWidth = this.size * 0.84;
-    let barHeight = 4; // Más fino
+    let barHeight = 4;
     let barX = this.x - barWidth/2;
     let barY = this.y - this.size/2 - barHeight - 5;
     let percent = Math.max(0, Math.min(1, this.health/this.maxHealth));
-
-    // Fondo negro
     ctx.save();
     ctx.beginPath();
-    // Rectángulo redondeado:
     const r = barHeight/2;
     ctx.moveTo(barX+r, barY);
     ctx.lineTo(barX+barWidth-r, barY);
@@ -335,8 +333,6 @@ class Player {
       ctx.fillStyle = "#ff2222";
       ctx.fill();
     }
-
-    // Borde blanco
     ctx.strokeStyle = "#fff";
     ctx.lineWidth = 1.1;
     ctx.stroke();
@@ -347,9 +343,11 @@ class Player {
 // --- COLISIONES Y CRECIMIENTO NATURAL ---
 function handleCollisions() {
   let N = players.length;
-  let minSize = 18, maxSize = 98;
+  let minSize = 18, maxSize = 110;
   let total = playerConfig.length + botsCount;
-  let newSize = minSize + (maxSize-minSize) * (1 - Math.log(N+1)/Math.log(total+1));
+  // Tamaño crece más al final visualmente
+  let frac = Math.min(1, (total-N)/(total*0.85));
+  let newSize = minSize + (maxSize-minSize) * frac;
   for(let i=0; i<N; i++){
     players[i].growTo(newSize);
     for(let j=i+1; j<N; j++){
@@ -374,6 +372,7 @@ function handleCollisions() {
         p2.health -= p2.isBot ? 0.18 : 0.017;
       }
     }
+    // Rebote en todo el canvas
     if(players[i].x-players[i].size/2 < 0){ players[i].x = players[i].size/2; players[i].vx = Math.abs(players[i].vx) || 0.1; }
     if(players[i].x+players[i].size/2 > gameSize.w){ players[i].x = gameSize.w-players[i].size/2; players[i].vx = -Math.abs(players[i].vx) || -0.1; }
     if(players[i].y-players[i].size/2 < 0){ players[i].y = players[i].size/2; players[i].vy = Math.abs(players[i].vy) || 0.1; }
@@ -387,8 +386,6 @@ function gameLoop(ts){
   let dt = ts - lastTime;
   lastTime = ts;
   ctx.clearRect(0,0,gameSize.w,gameSize.h);
-
-  // **Rectángulo amarillo eliminado**
 
   for(let p of players){
     p.move();
