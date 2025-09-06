@@ -11,29 +11,27 @@ const AREA_W = canvas.width;
 const AREA_H = canvas.height;
 let winner = null;
 
+// Bots
+let botsCount = 0;
+let botImageBlobUrl = null;
+document.getElementById("botsCount").addEventListener("change", e => {
+  botsCount = Math.max(0, parseInt(e.target.value) || 0);
+});
+function setBotImage() {
+  const fileInput = document.getElementById('botImageFile');
+  if (fileInput.files && fileInput.files[0]) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      botImageBlobUrl = e.target.result;
+      alert('Imagen para bots cargada ✔️');
+    };
+    reader.readAsDataURL(fileInput.files[0]);
+  } else {
+    alert('Seleccione una imagen primero');
+  }
+}
+
 // -- Utilidades --
-function safeColor(name) {
-  // Genera un color "bonito" por nombre
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  let h = hash % 360;
-  return `hsl(${h},70%,58%)`;
-}
-function drawRoundedRect(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-}
 function toDirectDownload(url) {
   if (!url) return url;
   let m = url.match(/\/file\/d\/([^/]+)\//);
@@ -53,6 +51,7 @@ async function fetchPlayersFromSheet() {
       name: jg.nombre || "Desconocido",
       image: jg.url_foto ? toDirectDownload(jg.url_foto) : null,
       health: 8,
+      isBot: false,
     }));
   } catch (e) {
     alert("Error al sincronizar jugadores desde Sheets");
@@ -65,6 +64,7 @@ class Player {
   constructor(obj, idx, total) {
     this.name = obj.name || "Desconocido";
     this.imageUrl = obj.image;
+    this.isBot = obj.isBot || false;
     this.baseSize = 38 + Math.random()*22;
     this.size = this.baseSize * 0.22;
     this.targetSize = this.baseSize;
@@ -73,7 +73,6 @@ class Player {
     this.maxHealth = obj.health || 8;
     this.alive = true;
     this.img = null;
-    this.color = safeColor(this.name);
     this.x = Math.random()*(AREA_W-120)+60;
     this.y = Math.random()*(AREA_H-120)+60;
     this.vx = (Math.random()-0.5)*1.6;
@@ -81,12 +80,20 @@ class Player {
     this.idx = idx;
     this.total = total;
     this.imgLoaded = false;
+    // Carga la imagen (bots usan la misma imagen)
     if (this.imageUrl) {
       let img = new Image();
       img.crossOrigin = "anonymous";
       img.src = this.imageUrl;
       img.onload = () => { this.imgLoaded = true; this.img = img; };
       img.onerror = () => { this.imgLoaded = false; };
+    } else if (this.isBot && botImageBlobUrl) {
+      let img = new Image();
+      img.src = botImageBlobUrl;
+      img.onload = () => { this.imgLoaded = true; this.img = img; };
+      img.onerror = () => { this.imgLoaded = false; };
+    } else {
+      this.imgLoaded = false;
     }
   }
   grow(dt){
@@ -104,19 +111,23 @@ class Player {
     if(this.y+this.size/2 > AREA_H){ this.y = AREA_H-this.size/2; this.vy *= -1; }
   }
   draw(ctx){
-    // Círculo o imagen
+    // Avatar circular
     ctx.save();
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.size/2, 0, 2*Math.PI);
+    ctx.closePath();
+    ctx.clip();
     if (this.img && this.imgLoaded) {
-      ctx.save();
-      ctx.clip();
       ctx.drawImage(this.img, this.x-this.size/2, this.y-this.size/2, this.size, this.size);
-      ctx.restore();
     } else {
-      ctx.fillStyle = this.color;
+      ctx.fillStyle = "#aaa";
       ctx.fill();
     }
+    ctx.restore();
+    // Borde blanco
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size/2, 0, 2*Math.PI);
     ctx.lineWidth = 2.5;
     ctx.strokeStyle = "#fff";
     ctx.stroke();
@@ -128,7 +139,7 @@ class Player {
     ctx.textAlign = "center";
     ctx.fillText(this.name, this.x, this.y+this.size/2+16);
 
-    // Barra de vida
+    // Barra de vida (arriba del avatar)
     let bw = Math.max(55, this.size);
     let bh = 9;
     let pct = Math.max(0, Math.min(1, this.health / this.maxHealth));
@@ -225,15 +236,20 @@ function showWinner(winner){
   ctx.translate(AREA_W/2, AREA_H/2);
   ctx.beginPath();
   ctx.arc(0,0,180,0,2*Math.PI);
+  ctx.closePath();
+  ctx.clip();
   if (winner.img && winner.imgLoaded) {
-    ctx.save();
-    ctx.clip();
     ctx.drawImage(winner.img, -180, -180, 360, 360);
-    ctx.restore();
   } else {
-    ctx.fillStyle = winner.color;
+    ctx.fillStyle = "#aaa";
     ctx.fill();
   }
+  ctx.restore();
+
+  // Borde dorado
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(AREA_W/2, AREA_H/2, 180, 0, 2*Math.PI);
   ctx.lineWidth = 8;
   ctx.strokeStyle = "#FFD700";
   ctx.stroke();
@@ -252,18 +268,29 @@ function showWinner(winner){
   ctx.fillText("Presiona Jugar para reiniciar", AREA_W/2, AREA_H/2+320);
 }
 
-async function syncPlayers(){
+async function syncPlayers() {
   document.getElementById("count").innerText = "Sincronizando...";
   let sheetPlayers = await fetchPlayersFromSheet();
-  if(sheetPlayers.length){
-    players = [];
-    for(let i=0; i<sheetPlayers.length; i++){
-      players.push(new Player(sheetPlayers[i], i, sheetPlayers.length));
+  let botsArray = [];
+  if (botsCount > 0 && botImageBlobUrl) {
+    for (let i = 0; i < botsCount; i++) {
+      botsArray.push({
+        name: "Bot-" + (i + 1),
+        image: botImageBlobUrl,
+        health: 8,
+        isBot: true,
+      });
     }
-    document.getElementById("count").innerText = "Jugadores sincronizados: "+players.length;
-  }else{
-    document.getElementById("count").innerText = "Sin jugadores";
   }
+  players = [];
+  let totalPlayers = sheetPlayers.length + botsArray.length;
+  for (let i = 0; i < sheetPlayers.length; i++) {
+    players.push(new Player(sheetPlayers[i], i, totalPlayers));
+  }
+  for (let i = 0; i < botsArray.length; i++) {
+    players.push(new Player(botsArray[i], sheetPlayers.length + i, totalPlayers));
+  }
+  document.getElementById("count").innerText = "Jugadores sincronizados: " + players.length;
   leaderboardOn = true;
   winner = null;
 }
