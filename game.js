@@ -3,9 +3,31 @@
 // --- CONFIGURACIÓN ---
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-const gameSize = {w:1360, h:800}; // canvas tamaño grande
+const playerListDiv = document.getElementById("player-list");
+const leftInfoDiv = document.getElementById("left-info");
+const leaderboardDiv = document.getElementById("leaderboard");
+const speedInput = document.getElementById("speedInput");
 
-// Define el área central (similar a preview)
+let mainMenu = document.getElementById("main-menu");
+let gameScreen = document.getElementById("game-screen");
+let previewDiv = document.getElementById("preview-screen");
+let previewCanvas = document.getElementById("preview-canvas");
+let previewCtx = previewCanvas.getContext("2d");
+let previewLabel = document.getElementById("preview-label");
+let botsCount = 0;
+let botImageBlobUrl = null;
+let botImageDataURL = null;
+let syncStatus = document.getElementById("status-sync");
+let running = false;
+let lastTime = 0;
+let winner = null;
+let players = [];
+let playerConfig = [];
+let gameSize = {w:1360, h:800}; // canvas tamaño grande
+
+let globalSpeed = 0.14; // movimiento natural
+
+// --- ÁREA CENTRAL DEL JUEGO ---
 const centralArea = {
   x: gameSize.w * 0.14,
   y: gameSize.h * 0.17,
@@ -13,17 +35,162 @@ const centralArea = {
   h: gameSize.h * 0.67
 };
 
-let globalSpeed = 0.14; // movimiento natural
-let running = false;
-let lastTime = 0;
-let players = [];
-let playerConfig = [];
-let botsCount = 0;
-let botImageDataURL = null;
+// --- UI ---
+document.getElementById("botsCount").addEventListener("change", e => {
+  botsCount = Math.max(0, parseInt(e.target.value) || 0);
+  updatePlayerList();
+});
+speedInput.addEventListener("change", e => {
+  globalSpeed = Math.max(0.05, parseFloat(e.target.value) || 0.14);
+});
+function setBotImage() {
+  const fileInput = document.getElementById('botImageFile');
+  if (fileInput.files && fileInput.files[0]) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      botImageBlobUrl = e.target.result;
+      botImageDataURL = e.target.result;
+      alert('Imagen para bots cargada ✔️');
+      updatePlayerList();
+    };
+    reader.readAsDataURL(fileInput.files[0]);
+  } else {
+    alert('Seleccione una imagen primero');
+  }
+}
 
-// Ejemplo de configuración de jugadores y bots
-// playerConfig = [{name: "user1", image: "img1.png", health: 8, isBot: false}, ...];
-// botsCount = 5; botImageDataURL = "imgBot.png";
+async function fetchAvatarsFromGitHub() {
+  const apiUrl = "https://api.github.com/repos/peleadeseguidores/peleadeseguidores-game-web/contents/images";
+  try {
+    const res = await fetch(apiUrl, {
+      headers: { "Accept": "application/vnd.github.v3+json" }
+    });
+    const files = await res.json();
+    const avatars = files
+      .filter(f => f.type === "file" && f.download_url)
+      .map(f => ({
+        name: f.name.replace(/\.[^/.]+$/, ""),
+        image: f.download_url,
+        health: 8,
+        isBot: false,
+      }));
+    return avatars;
+  } catch (e) {
+    alert("Error al cargar avatares de GitHub");
+    return [];
+  }
+}
+
+async function syncPlayers() {
+  syncStatus.innerText = "Sincronizando avatares desde GitHub...";
+  playerConfig = await fetchAvatarsFromGitHub();
+  updatePlayerList();
+  syncStatus.innerText = `Sincronizado (${playerConfig.length} avatares de GitHub)`;
+}
+
+function updatePlayerList() {
+  let html = "<h4 style='color:#FFD700;margin-bottom:12px;'>Jugadores:</h4>";
+  let allPlayers = [...playerConfig];
+  if (botsCount > 0 && botImageDataURL) {
+    for(let i=0; i<botsCount; i++) {
+      allPlayers.push({name:"Bot-"+(i+1), image:botImageDataURL, health:8, isBot:true});
+    }
+  }
+  html += `<div style="max-height:350px;overflow-y:auto;">`;
+  allPlayers.forEach((p,i) => {
+    html += `<div class="player-row" id="row${i}">
+      <img src="${p.image}" alt="Avatar" />
+      <span style="margin-left:8px;font-weight:bold;color:#FFD700;">${p.name}</span>
+      <input type="number" min="1" max="99" value="${p.health}" style="margin-left:6px;" onchange="editHealth(${i},this.value)">
+      <button onclick="deletePlayer(${i})" title="Eliminar jugador">✖</button>
+    </div>`;
+  });
+  html += `</div>`;
+  playerListDiv.innerHTML = html;
+}
+function editHealth(idx,val) {
+  let allPlayers = [...playerConfig];
+  if (botsCount > 0 && botImageDataURL) {
+    for(let i=0; i<botsCount; i++) allPlayers.push({name:"Bot-"+(i+1), image:botImageDataURL, health:8, isBot:true});
+  }
+  val = Math.max(1,Math.min(99,parseInt(val)||8));
+  if (allPlayers[idx]) {
+    if (idx < playerConfig.length) playerConfig[idx].health = val;
+    // bots no editan aquí (solo visual)
+    updatePlayerList();
+  }
+}
+function deletePlayer(idx) {
+  if (idx < playerConfig.length) {
+    playerConfig.splice(idx,1);
+  } else {
+    botsCount--;
+    document.getElementById("botsCount").value = botsCount;
+  }
+  updatePlayerList();
+}
+
+function showMenu() {
+  mainMenu.style.display = "flex";
+  gameScreen.style.display = "none";
+  previewDiv.style.display = "none";
+  running = false;
+}
+
+// --- PREVIEW ---
+function showPreview() {
+  let allPlayers = [...playerConfig];
+  if (botsCount > 0 && botImageDataURL) {
+    for(let i=0; i<botsCount; i++) {
+      allPlayers.push({name:"Bot-"+(i+1), image:botImageDataURL, health:8, isBot:true});
+    }
+  }
+  previewDiv.style.display = "flex";
+  previewLabel.innerText = "Jugadores listos para la pelea";
+
+  let N = allPlayers.length || 1;
+  let cols = Math.ceil(Math.sqrt(N*16/9));
+  let rows = Math.ceil(N/cols);
+  let margin = 12;
+  let cellW = (1280-margin*2)/cols;
+  let cellH = (720-margin*2)/rows;
+  let size = 24;
+
+  previewCtx.clearRect(0,0,1280,720);
+
+  allPlayers.forEach((pl, i) => {
+    let col = i%cols;
+    let row = Math.floor(i/cols);
+    let x = margin + cellW*col + cellW/2;
+    let y = margin + cellH*row + cellH/2;
+    let img = new Image();
+    img.src = pl.image || '';
+    img.onload = () => {
+      previewCtx.save();
+      previewCtx.beginPath();
+      previewCtx.arc(x, y, size/2, 0, 2*Math.PI);
+      previewCtx.closePath();
+      previewCtx.clip();
+      previewCtx.drawImage(img, x-size/2, y-size/2, size, size);
+      previewCtx.restore();
+    };
+    img.onerror = () => {
+      previewCtx.save();
+      previewCtx.beginPath();
+      previewCtx.arc(x, y, size/2, 0, 2*Math.PI);
+      previewCtx.closePath();
+      previewCtx.clip();
+      previewCtx.fillStyle = "#777";
+      previewCtx.fill();
+      previewCtx.restore();
+    };
+  });
+
+  setTimeout(()=> {
+    previewDiv.style.display = "none";
+    startGame();
+  }, 3000);
+}
 
 // --- JUEGO PRINCIPAL ---
 function startGame() {
@@ -65,8 +232,12 @@ function startGame() {
       players.push(new Player(allPlayers[i], size, x, y));
     }
   }
-  running = true;
+  mainMenu.style.display = "none";
+  gameScreen.style.display = "block";
+  leaderboardDiv.style.display = "none";
+  winner = null;
   lastTime = performance.now();
+  running = true;
   requestAnimationFrame(gameLoop);
 }
 
@@ -78,8 +249,8 @@ class Player {
     this.isBot = obj.isBot || false;
     this.size = size;
     this.targetSize = size;
-    this.health = obj.isBot ? 0.2 + Math.random()*0.3 : 8; // bots: menos vida
-    this.maxHealth = 8;
+    this.health = obj.isBot ? 0.2 + Math.random()*0.3 : (obj.health || 8); // bots: menos vida
+    this.maxHealth = obj.isBot ? 1 : (obj.health || 8);
     this.alive = true;
     this.img = new Image();
     this.imgLoaded = false;
@@ -258,4 +429,7 @@ function showWinner(winner){
 }
 
 // --- INICIALIZACIÓN ---
-// startGame() debe ser llamado con la configuración lista.
+window.onload = () => {
+  // Si quieres sincronizar al cargar, descomenta:
+  // syncPlayers();
+};
