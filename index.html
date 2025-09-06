@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Pelea Extrema Web</title>
+  <style>
+    body { margin:0; background:#000; overflow:hidden; }
+    canvas { display:block; margin:auto; background:#000; }
+    #ui {
+      position: absolute; top: 10px; left: 10px; color: #fff;
+      font-family: sans-serif; z-index:10;
+    }
+    button { font-size: 18px; margin: 2px; }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <button onclick="startGame()">Jugar</button>
+    <span id="count"></span>
+  </div>
+  <canvas id="game" width="1280" height="720"></canvas>
+  <script src="game.js"></script>
+</body>
+</html>
