@@ -110,9 +110,7 @@ function editHealth(idx,val) {
   if (allPlayers[idx]) {
     allPlayers[idx].health = val;
     if (idx < playerConfig.length) playerConfig[idx].health = val;
-    else { // bot
-      // bots no editamos en playerConfig
-    }
+    else { }
     updatePlayerList();
   }
 }
@@ -161,23 +159,26 @@ function showPreview() {
   let size = Math.min(cellW, cellH)*0.78;
 
   previewCtx.clearRect(0,0,1280,720);
-  for(let i=0; i<N; i++) {
+
+  let loadedImgs = Array(N).fill(false);
+
+  allPlayers.forEach((pl, i) => {
     let col = i%cols;
     let row = Math.floor(i/cols);
     let x = margin + cellW*col + cellW/2;
     let y = margin + cellH*row + cellH/2;
     // Avatar circular
-    previewCtx.save();
-    previewCtx.beginPath();
-    previewCtx.arc(x, y, size/2, 0, 2*Math.PI);
-    previewCtx.closePath();
-    previewCtx.clip();
     let img = new Image();
-    img.src = allPlayers[i].image;
+    img.src = pl.image || '';
     img.onload = () => {
+      previewCtx.save();
+      previewCtx.beginPath();
+      previewCtx.arc(x, y, size/2, 0, 2*Math.PI);
+      previewCtx.closePath();
+      previewCtx.clip();
       previewCtx.drawImage(img, x-size/2, y-size/2, size, size);
-      // Borde blanco
       previewCtx.restore();
+      // Borde blanco
       previewCtx.save();
       previewCtx.beginPath();
       previewCtx.arc(x, y, size/2, 0, 2*Math.PI);
@@ -185,23 +186,45 @@ function showPreview() {
       previewCtx.strokeStyle = "#fff";
       previewCtx.stroke();
       previewCtx.restore();
-
       // Nombre
       previewCtx.font = "15px Segoe UI, Arial";
       previewCtx.fillStyle = "#FFD700";
       previewCtx.textAlign = "center";
-      previewCtx.fillText(allPlayers[i].name, x, y+size/2+16);
+      previewCtx.fillText(pl.name, x, y+size/2+16);
       // Vida
       previewCtx.font = "13px Segoe UI, Arial";
       previewCtx.fillStyle = "#43E73A";
-      previewCtx.fillText("Vida: "+allPlayers[i].health, x, y+size/2+32);
-    }
+      previewCtx.fillText("Vida: "+pl.health, x, y+size/2+32);
+    };
     img.onerror = () => {
+      previewCtx.save();
+      previewCtx.beginPath();
+      previewCtx.arc(x, y, size/2, 0, 2*Math.PI);
+      previewCtx.closePath();
+      previewCtx.clip();
       previewCtx.fillStyle = "#777";
       previewCtx.fill();
       previewCtx.restore();
-    }
-  }
+      // Borde blanco
+      previewCtx.save();
+      previewCtx.beginPath();
+      previewCtx.arc(x, y, size/2, 0, 2*Math.PI);
+      previewCtx.lineWidth = 2.5;
+      previewCtx.strokeStyle = "#fff";
+      previewCtx.stroke();
+      previewCtx.restore();
+      // Nombre
+      previewCtx.font = "15px Segoe UI, Arial";
+      previewCtx.fillStyle = "#FFD700";
+      previewCtx.textAlign = "center";
+      previewCtx.fillText(pl.name, x, y+size/2+16);
+      // Vida
+      previewCtx.font = "13px Segoe UI, Arial";
+      previewCtx.fillStyle = "#43E73A";
+      previewCtx.fillText("Vida: "+pl.health, x, y+size/2+32);
+    };
+  });
+
   // Espera 3s y empieza el juego
   setTimeout(()=> {
     previewDiv.style.display = "none";
@@ -258,13 +281,14 @@ class Player {
     this.alive = true;
     this.img = new Image();
     this.imgLoaded = false;
-    this.img.src = this.imageUrl;
+    this.img.src = this.imageUrl || '';
+    // NO crossOrigin
     this.img.onload = () => { this.imgLoaded = true; };
     this.img.onerror = () => { this.imgLoaded = false; };
     this.x = x;
     this.y = y;
     let angle = Math.random()*2*Math.PI;
-    let speed = globalSpeed * (0.7 + Math.random()*0.6); // velocidad configurable
+    let speed = globalSpeed * (0.7 + Math.random()*0.6);
     this.vx = Math.cos(angle)*speed;
     this.vy = Math.sin(angle)*speed;
   }
@@ -285,7 +309,6 @@ class Player {
     if(this.y+this.size/2 > gameSize.h){ this.y = gameSize.h-this.size/2; this.vy *= -1; }
   }
   draw(ctx) {
-    // Avatar circular
     ctx.save();
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.size/2, 0, 2*Math.PI);
@@ -298,7 +321,6 @@ class Player {
       ctx.fill();
     }
     ctx.restore();
-    // Borde blanco
     ctx.save();
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.size/2, 0, 2*Math.PI);
@@ -306,12 +328,10 @@ class Player {
     ctx.strokeStyle = "#fff";
     ctx.stroke();
     ctx.restore();
-    // Nombre
     ctx.font = "15px Segoe UI, Arial";
     ctx.fillStyle = "#FFD700";
     ctx.textAlign = "center";
     ctx.fillText(this.name, this.x, this.y+this.size/2+16);
-    // Barra de vida (arriba del avatar)
     let bw = Math.max(55, this.size);
     let bh = 9;
     let pct = Math.max(0, Math.min(1, this.health / this.maxHealth));
@@ -332,7 +352,7 @@ class Player {
   }
 }
 
-// Colisiones tipo bolas de billar
+// Colisiones (lógica anterior, rebote simple)
 function handleCollisions(dt) {
   let growFactor = Math.min(1.25, 1 + 0.25*(players.length/Math.max(2,playerConfig.length + botsCount)));
   let newSize = Math.max(48, Math.min((gameSize.w*gameSize.h)/(players.length*260), 120))*growFactor;
@@ -344,38 +364,22 @@ function handleCollisions(dt) {
       let dist = Math.hypot(dx, dy);
       let minDist = (p1.size+p2.size)/2;
       if(dist < minDist){
-        // Separar (colisión realista)
         let overlap = minDist - dist;
         let nx = dx/(dist||1), ny = dy/(dist||1);
-        // Empuje
         p1.x += nx*overlap/2;
         p1.y += ny*overlap/2;
         p2.x -= nx*overlap/2;
         p2.y -= ny*overlap/2;
-        // Rebote tipo billar: transferencia de velocidad
-        let v1 = {x:p1.vx, y:p1.vy};
-        let v2 = {x:p2.vx, y:p2.vy};
-        // Proyección en el eje de colisión
-        let dot1 = v1.x*nx + v1.y*ny;
-        let dot2 = v2.x*nx + v2.y*ny;
-        // Intercambiar componentes sobre el eje
-        let v1p = dot2;
-        let v2p = dot1;
-        p1.vx += (v1p-dot1)*0.8;
-        p1.vy += (v1p-dot1)*0.8;
-        p2.vx += (v2p-dot2)*0.8;
-        p2.vy += (v2p-dot2)*0.8;
-        // Daño
+        p1.vx -= nx*0.12; p1.vy -= ny*0.12;
+        p2.vx += nx*0.12; p2.vy += ny*0.12;
         p1.health -= 0.02; p2.health -= 0.02;
       }
     }
-    // Limite pantalla
     if(players[i].x-players[i].size/2 < 0){ players[i].x = players[i].size/2; players[i].vx *= -1; }
     if(players[i].x+players[i].size/2 > gameSize.w){ players[i].x = gameSize.w-players[i].size/2; players[i].vx *= -1; }
     if(players[i].y-players[i].size/2 < 0){ players[i].y = players[i].size/2; players[i].vy *= -1; }
     if(players[i].y+players[i].size/2 > gameSize.h){ players[i].y = gameSize.h-players[i].size/2; players[i].vy *= -1; }
   }
-  // Eliminar muertos
   players = players.filter(p=>p.health>0);
 }
 
@@ -436,7 +440,6 @@ function showWinner(winner){
   }
   ctx.restore();
 
-  // Borde dorado
   ctx.save();
   ctx.beginPath();
   ctx.arc(gameSize.w/2, gameSize.h/2, 180, 0, 2*Math.PI);
