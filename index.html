@@ -11,6 +11,8 @@
       font-family: sans-serif; z-index:10;
     }
     button { font-size: 18px; margin: 2px; }
+    input[type="number"] { font-size: 18px; width: 60px; }
+    input[type="file"] { font-size: 16px; }
     #leaderboard {
       position: absolute; top: 70px; left: 20px; background:rgba(0,0,0,0.7); color:#FFD700;
       border-radius:12px; padding:18px 22px; font-size:18px; min-width:340px;
@@ -26,6 +28,11 @@
     <button onclick="startGame()">Jugar</button>
     <span id="count"></span>
     <button onclick="syncPlayers()">Sincronizar jugadores</button>
+    <span> Bots: 
+      <input type="number" id="botsCount" value="0" min="0" max="500" style="width:60px;">
+      <input type="file" id="botImageFile" accept="image/*">
+      <button onclick="setBotImage()">Usar imagen de bots</button>
+    </span>
   </div>
   <div id="leaderboard" style="display:none"></div>
   <canvas id="game" width="1280" height="720"></canvas>
