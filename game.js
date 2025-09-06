@@ -1,64 +1,198 @@
+// Configura aquí la URL de tu WebApp de Google Sheets:
+const SHEET_API_URL = "https://script.google.com/macros/s/AKfycbxhvAZ_6ajaSzW50AROEh8IUGAAXK4NOPRIyreK5gE2_CYkzVwhr7XWp4NOLyGyJzyW/exec";
+
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 let players = [];
 let running = false;
 let lastTime = 0;
-const PLAYER_COUNT = 1000; // Cambia aquí para miles de jugadores
+let leaderboardOn = true;
 const AREA_W = canvas.width;
 const AREA_H = canvas.height;
+let winner = null;
 
+// -- Utilidades --
+function safeColor(name) {
+  // Genera un color "bonito" por nombre
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  let h = hash % 360;
+  return `hsl(${h},70%,58%)`;
+}
+function drawRoundedRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+}
+function toDirectDownload(url) {
+  if (!url) return url;
+  let m = url.match(/\/file\/d\/([^/]+)\//);
+  if (m) return `https://drive.google.com/uc?export=download&id=${m[1]}`;
+  if (url.includes("export=view")) return url.replace("export=view", "export=download");
+  return url;
+}
+
+// -- Sincronización Google Sheets --
+async function fetchPlayersFromSheet() {
+  try {
+    const res = await fetch(SHEET_API_URL);
+    const data = await res.json();
+    if (!data.jugadores) return [];
+    // Formato: { nombre, url_foto }
+    return data.jugadores.map(jg => ({
+      name: jg.nombre || "Desconocido",
+      image: jg.url_foto ? toDirectDownload(jg.url_foto) : null,
+      health: 8,
+    }));
+  } catch (e) {
+    alert("Error al sincronizar jugadores desde Sheets");
+    return [];
+  }
+}
+
+// -- Jugador --
 class Player {
-  constructor(x, y) {
-    this.x = x;
-    this.y = y;
-    this.baseSize = 28 + Math.random() * 36;
-    this.size = this.baseSize * 0.18;
+  constructor(obj, idx, total) {
+    this.name = obj.name || "Desconocido";
+    this.imageUrl = obj.image;
+    this.baseSize = 38 + Math.random()*22;
+    this.size = this.baseSize * 0.22;
     this.targetSize = this.baseSize;
-    this.growSpeed = 2 + Math.random() * 2;
-    this.vx = (Math.random()-0.5) * 1.8;
-    this.vy = (Math.random()-0.5) * 1.8;
-    this.health = 8;
+    this.growSpeed = 2 + Math.random()*2;
+    this.health = obj.health || 8;
+    this.maxHealth = obj.health || 8;
     this.alive = true;
-    this.color = `hsl(${Math.floor(Math.random()*360)},80%,60%)`;
-    this.name = "Jugador" + Math.floor(Math.random()*99999);
+    this.img = null;
+    this.color = safeColor(this.name);
+    this.x = Math.random()*(AREA_W-120)+60;
+    this.y = Math.random()*(AREA_H-120)+60;
+    this.vx = (Math.random()-0.5)*1.6;
+    this.vy = (Math.random()-0.5)*1.6;
+    this.idx = idx;
+    this.total = total;
+    this.imgLoaded = false;
+    if (this.imageUrl) {
+      let img = new Image();
+      img.crossOrigin = "anonymous";
+      img.src = this.imageUrl;
+      img.onload = () => { this.imgLoaded = true; this.img = img; };
+      img.onerror = () => { this.imgLoaded = false; };
+    }
   }
   grow(dt){
     if(this.size < this.targetSize){
-      this.size += this.growSpeed * dt/16;
+      this.size += this.growSpeed * dt/20;
       if(this.size > this.targetSize) this.size = this.targetSize;
     }
   }
   move(){
     this.x += this.vx;
     this.y += this.vy;
-    // Limites de pantalla
     if(this.x-this.size/2 < 0){ this.x = this.size/2; this.vx *= -1; }
     if(this.x+this.size/2 > AREA_W){ this.x = AREA_W-this.size/2; this.vx *= -1; }
     if(this.y-this.size/2 < 0){ this.y = this.size/2; this.vy *= -1; }
     if(this.y+this.size/2 > AREA_H){ this.y = AREA_H-this.size/2; this.vy *= -1; }
   }
   draw(ctx){
+    // Círculo o imagen
     ctx.save();
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.size/2, 0, 2*Math.PI);
-    ctx.fillStyle = this.color;
+    if (this.img && this.imgLoaded) {
+      ctx.save();
+      ctx.clip();
+      ctx.drawImage(this.img, this.x-this.size/2, this.y-this.size/2, this.size, this.size);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = this.color;
+      ctx.fill();
+    }
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = "#fff";
+    ctx.stroke();
+    ctx.restore();
+
+    // Nombre
+    ctx.font = "15px Segoe UI, Arial";
+    ctx.fillStyle = "#FFD700";
+    ctx.textAlign = "center";
+    ctx.fillText(this.name, this.x, this.y+this.size/2+16);
+
+    // Barra de vida
+    let bw = Math.max(55, this.size);
+    let bh = 9;
+    let pct = Math.max(0, Math.min(1, this.health / this.maxHealth));
+    let bx = this.x-bw/2, by = this.y-this.size/2-16;
+    ctx.save();
+    ctx.globalAlpha = 0.75;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, bw, bh, 4);
+    ctx.fillStyle = "#222";
     ctx.fill();
     ctx.strokeStyle = "#fff";
-    ctx.lineWidth = 2;
     ctx.stroke();
+    ctx.closePath();
+    ctx.beginPath();
+    ctx.roundRect(bx+2, by+2, (bw-4)*pct, bh-4, 3);
+    ctx.fillStyle = "#43E73A";
+    ctx.fill();
     ctx.restore();
   }
 }
 
-function startGame(){
-  players = [];
-  running = true;
-  for(let i=0; i<PLAYER_COUNT; i++){
-    let x = Math.random()*(AREA_W-120)+60;
-    let y = Math.random()*(AREA_H-120)+60;
-    players.push(new Player(x,y));
+// -- Leaderboard --
+function drawLeaderboard() {
+  if (!leaderboardOn) {
+    document.getElementById("leaderboard").style.display = "none";
+    return;
   }
+  let sorted = [...players].sort((a,b)=>b.health-a.health);
+  let top10 = sorted.slice(0,10);
+  let html = "<h3>Marcador</h3><ul>";
+  for (let i=0; i<top10.length; i++) {
+    let p = top10[i];
+    html += `<li>${i+1}. <span style="color:#FFD700">${p.name}</span> <span style="color:#fff">(${p.health.toFixed(1)})</span></li>`;
+  }
+  html += "</ul>";
+  document.getElementById("leaderboard").innerHTML = html;
+  document.getElementById("leaderboard").style.display = "block";
+}
+
+// -- Colisiones --
+function handleCollisions() {
+  for(let i=0; i<players.length; i++){
+    for(let j=i+1; j<players.length; j++){
+      let p1 = players[i], p2 = players[j];
+      let dx = p1.x-p2.x, dy = p1.y-p2.y;
+      let dist = Math.hypot(dx, dy);
+      if(dist < (p1.size+p2.size)/2){
+        let nx = dx/dist, ny = dy/dist;
+        p1.vx -= nx*0.1; p1.vy -= ny*0.1;
+        p2.vx += nx*0.1; p2.vy += ny*0.1;
+        p1.health -= 0.025; p2.health -= 0.025;
+      }
+    }
+  }
+  // Eliminar muertos
+  players = players.filter(p=>p.health>0);
+}
+
+// -- Juego principal --
+function startGame(){
+  running = true;
+  winner = null;
   document.getElementById("count").innerText = "Vivos: "+players.length;
+  leaderboardOn = true;
   requestAnimationFrame(gameLoop);
 }
 
@@ -67,36 +201,20 @@ function gameLoop(ts){
   lastTime = ts;
   ctx.clearRect(0,0,AREA_W,AREA_H);
 
-  // Animación y movimiento
   for(let p of players){
-    p.grow(dt);
+    p.grow(dt||16);
     p.move();
     p.draw(ctx);
   }
-
-  // Colisiones (simple, solo reduce salud)
-  for(let i=0; i<players.length; i++){
-    for(let j=i+1; j<players.length; j++){
-      let p1 = players[i], p2 = players[j];
-      let dx = p1.x-p2.x, dy = p1.y-p2.y;
-      let dist = Math.hypot(dx, dy);
-      if(dist < (p1.size+p2.size)/2){
-        // Se chocan, rebotan y pierden vida
-        let nx = dx/dist, ny = dy/dist;
-        p1.vx -= nx*0.1; p1.vy -= ny*0.1;
-        p2.vx += nx*0.1; p2.vy += ny*0.1;
-        p1.health -= 0.01; p2.health -= 0.01;
-      }
-    }
-  }
-  // Eliminar muertos
-  players = players.filter(p=>p.health>0);
+  handleCollisions();
+  drawLeaderboard();
 
   document.getElementById("count").innerText = "Vivos: "+players.length;
 
   if(running && players.length>1){
     requestAnimationFrame(gameLoop);
   }else if(players.length==1){
+    leaderboardOn = false;
     showWinner(players[0]);
   }
 }
@@ -107,20 +225,50 @@ function showWinner(winner){
   ctx.translate(AREA_W/2, AREA_H/2);
   ctx.beginPath();
   ctx.arc(0,0,180,0,2*Math.PI);
-  ctx.fillStyle = winner.color;
-  ctx.fill();
+  if (winner.img && winner.imgLoaded) {
+    ctx.save();
+    ctx.clip();
+    ctx.drawImage(winner.img, -180, -180, 360, 360);
+    ctx.restore();
+  } else {
+    ctx.fillStyle = winner.color;
+    ctx.fill();
+  }
   ctx.lineWidth = 8;
   ctx.strokeStyle = "#FFD700";
   ctx.stroke();
   ctx.restore();
 
-  ctx.font = "48px sans-serif";
+  ctx.font = "58px Segoe UI, Arial";
   ctx.fillStyle = "#FFD700";
   ctx.textAlign = "center";
-  ctx.fillText("¡Ganador!", AREA_W/2, AREA_H/2-150);
+  ctx.fillText("¡Ganador!", AREA_W/2, AREA_H/2-160);
   ctx.fillStyle = "#fff";
-  ctx.font = "36px sans-serif";
+  ctx.font = "44px Segoe UI, Arial";
   ctx.fillText(winner.name, AREA_W/2, AREA_H/2+210);
-  ctx.font = "28px sans-serif";
+  ctx.font = "34px Segoe UI, Arial";
   ctx.fillText("@peleadeseguidores", AREA_W/2, AREA_H/2+270);
+  ctx.font = "24px Segoe UI, Arial";
+  ctx.fillText("Presiona Jugar para reiniciar", AREA_W/2, AREA_H/2+320);
 }
+
+async function syncPlayers(){
+  document.getElementById("count").innerText = "Sincronizando...";
+  let sheetPlayers = await fetchPlayersFromSheet();
+  if(sheetPlayers.length){
+    players = [];
+    for(let i=0; i<sheetPlayers.length; i++){
+      players.push(new Player(sheetPlayers[i], i, sheetPlayers.length));
+    }
+    document.getElementById("count").innerText = "Jugadores sincronizados: "+players.length;
+  }else{
+    document.getElementById("count").innerText = "Sin jugadores";
+  }
+  leaderboardOn = true;
+  winner = null;
+}
+
+// Sincroniza jugadores al cargar la página
+window.onload = () => {
+  syncPlayers();
+};
