@@ -1,5 +1,4 @@
 // Configuración
-const SHEET_API_URL = "https://script.google.com/macros/s/AKfycbxhvAZ_6ajaSzW50AROEh8IUGAAXK4NOPRIyreK5gE2_CYkzVwhr7XWp4NOLyGyJzyW/exec";
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 const playerListDiv = document.getElementById("player-list");
@@ -51,33 +50,36 @@ function setBotImage() {
   }
 }
 
-// Utilidades de imagen
-function toDirectDownload(url) {
-  if (!url) return url;
-  let m = url.match(/id=([^&]+)/);
-  if (m) return `https://drive.google.com/uc?export=download&id=${m[1]}`;
-  return url;
-}
-
-// Sincronización Google Sheets
-async function fetchPlayersFromSheet() {
-  syncStatus.innerText = "Sincronizando...";
+// Sincronización GitHub avatars
+async function fetchAvatarsFromGitHub() {
+  const apiUrl = "https://api.github.com/repos/peleadeseguidores/peleadeseguidores-game-web/contents/images";
   try {
-    const res = await fetch(SHEET_API_URL);
-    const data = await res.json();
-    if (!data.jugadores) return [];
-    // Formato: { nombre, url_foto }
-    return data.jugadores.map(jg => ({
-      name: jg.nombre || "Desconocido",
-      image: jg.url_foto ? toDirectDownload(jg.url_foto) : null,
-      health: 8,
-      isBot: false,
-    }));
+    const res = await fetch(apiUrl, {
+      headers: { "Accept": "application/vnd.github.v3+json" }
+    });
+    const files = await res.json();
+    // Solo archivos de imagen
+    const avatars = files
+      .filter(f => f.type === "file" && f.download_url)
+      .map(f => ({
+        name: f.name.replace(/\.[^/.]+$/, ""), // sin extensión
+        image: f.download_url,
+        health: 8,
+        isBot: false,
+      }));
+    return avatars;
   } catch (e) {
-    syncStatus.innerText = "Error al sincronizar";
-    alert("Error al sincronizar jugadores desde Sheets");
+    alert("Error al cargar avatares de GitHub");
     return [];
   }
+}
+
+// Sincroniza los avatares desde GitHub
+async function syncPlayers() {
+  syncStatus.innerText = "Sincronizando avatares desde GitHub...";
+  playerConfig = await fetchAvatarsFromGitHub();
+  updatePlayerList();
+  syncStatus.innerText = `Sincronizado (${playerConfig.length} avatares de GitHub)`;
 }
 
 // Pantalla de configuración
@@ -122,12 +124,6 @@ function deletePlayer(idx) {
     document.getElementById("botsCount").value = botsCount;
   }
   updatePlayerList();
-}
-
-async function syncPlayers() {
-  playerConfig = await fetchPlayersFromSheet();
-  updatePlayerList();
-  syncStatus.innerText = `Sincronizado (${playerConfig.length} jugadores de Sheets)`;
 }
 
 // Pantalla de juego
