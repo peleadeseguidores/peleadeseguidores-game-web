@@ -1,192 +1,29 @@
-// Pelea de Seguidores - Versión Mejorada
+// Pelea de Seguidores - Mejorado (pelotas siempre en movimiento, barra de vida, tamaño dinámico, bots mueren primero)
 
 // --- CONFIGURACIÓN ---
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-const playerListDiv = document.getElementById("player-list");
-const leftInfoDiv = document.getElementById("left-info");
-const leaderboardDiv = document.getElementById("leaderboard");
-const speedInput = document.getElementById("speedInput");
+const gameSize = {w:1360, h:800}; // canvas tamaño grande
 
-let mainMenu = document.getElementById("main-menu");
-let gameScreen = document.getElementById("game-screen");
-let botsCount = 0;
-let botImageBlobUrl = null;
-let botImageDataURL = null;
-let syncStatus = document.getElementById("status-sync");
+// Define el área central (similar a preview)
+const centralArea = {
+  x: gameSize.w * 0.14,
+  y: gameSize.h * 0.17,
+  w: gameSize.w * 0.72,
+  h: gameSize.h * 0.67
+};
+
+let globalSpeed = 0.14; // movimiento natural
 let running = false;
 let lastTime = 0;
-let leaderboardOn = true;
-let winner = null;
 let players = [];
 let playerConfig = [];
-let gameSize = {w:1360, h:800}; // Más grande y central
+let botsCount = 0;
+let botImageDataURL = null;
 
-let globalSpeed = 0.14; // Muy lento y natural
-
-// --- PREVIEW ---
-let previewDiv = document.getElementById("preview-screen");
-let previewCanvas = document.getElementById("preview-canvas");
-let previewCtx = previewCanvas.getContext("2d");
-let previewLabel = document.getElementById("preview-label");
-
-// --- UI ---
-document.getElementById("botsCount").addEventListener("change", e => {
-  botsCount = Math.max(0, parseInt(e.target.value) || 0);
-  updatePlayerList();
-});
-speedInput.addEventListener("change", e => {
-  globalSpeed = Math.max(0.05, parseFloat(e.target.value) || 0.14);
-});
-function setBotImage() {
-  const fileInput = document.getElementById('botImageFile');
-  if (fileInput.files && fileInput.files[0]) {
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      botImageBlobUrl = e.target.result;
-      botImageDataURL = e.target.result;
-      alert('Imagen para bots cargada ✔️');
-      updatePlayerList();
-    };
-    reader.readAsDataURL(fileInput.files[0]);
-  } else {
-    alert('Seleccione una imagen primero');
-  }
-}
-
-async function fetchAvatarsFromGitHub() {
-  const apiUrl = "https://api.github.com/repos/peleadeseguidores/peleadeseguidores-game-web/contents/images";
-  try {
-    const res = await fetch(apiUrl, {
-      headers: { "Accept": "application/vnd.github.v3+json" }
-    });
-    const files = await res.json();
-    const avatars = files
-      .filter(f => f.type === "file" && f.download_url)
-      .map(f => ({
-        name: f.name.replace(/\.[^/.]+$/, ""),
-        image: f.download_url,
-        health: 8,
-        isBot: false,
-      }));
-    return avatars;
-  } catch (e) {
-    alert("Error al cargar avatares de GitHub");
-    return [];
-  }
-}
-
-async function syncPlayers() {
-  syncStatus.innerText = "Sincronizando avatares desde GitHub...";
-  playerConfig = await fetchAvatarsFromGitHub();
-  updatePlayerList();
-  syncStatus.innerText = `Sincronizado (${playerConfig.length} avatares de GitHub)`;
-}
-
-function updatePlayerList() {
-  let html = "<h4>Jugadores:</h4>";
-  let allPlayers = [...playerConfig];
-  if (botsCount > 0 && botImageDataURL) {
-    for(let i=0; i<botsCount; i++) {
-      allPlayers.push({name:"Bot-"+(i+1), image:botImageDataURL, health:8, isBot:true});
-    }
-  }
-  html += `<div style="max-height:350px;overflow-y:auto;">`;
-  allPlayers.forEach((p,i) => {
-    html += `<div class="player-row" id="row${i}">
-      <img src="${p.image}" alt="Avatar" />
-      <span style="margin-left:8px;font-weight:bold;">${p.name}</span>
-      <input type="number" min="1" max="99" value="${p.health}" style="margin-left:6px;" onchange="editHealth(${i},this.value)">
-      <button onclick="deletePlayer(${i})" style="background:#F55;color:#fff;border:none;padding:3px 10px;border-radius:6px;">✖</button>
-    </div>`;
-  });
-  html += `</div>`;
-  playerListDiv.innerHTML = html;
-}
-function editHealth(idx,val) {
-  let allPlayers = [...playerConfig];
-  if (botsCount > 0 && botImageDataURL) {
-    for(let i=0; i<botsCount; i++) allPlayers.push({name:"Bot-"+(i+1), image:botImageDataURL, health:8, isBot:true});
-  }
-  val = Math.max(1,Math.min(99,parseInt(val)||8));
-  if (allPlayers[idx]) {
-    allPlayers[idx].health = val;
-    if (idx < playerConfig.length) playerConfig[idx].health = val;
-    else { }
-    updatePlayerList();
-  }
-}
-function deletePlayer(idx) {
-  if (idx < playerConfig.length) {
-    playerConfig.splice(idx,1);
-  } else {
-    botsCount--;
-    document.getElementById("botsCount").value = botsCount;
-  }
-  updatePlayerList();
-}
-
-function showMenu() {
-  mainMenu.style.display = "flex";
-  gameScreen.style.display = "none";
-  previewDiv.style.display = "none";
-  running = false;
-}
-
-// --- PREVIEW ---
-function showPreview() {
-  let allPlayers = [...playerConfig];
-  if (botsCount > 0 && botImageDataURL) {
-    for(let i=0; i<botsCount; i++) {
-      allPlayers.push({name:"Bot-"+(i+1), image:botImageDataURL, health:8, isBot:true});
-    }
-  }
-  previewDiv.style.display = "flex";
-  previewLabel.innerText = "Jugadores listos para la pelea";
-
-  let N = allPlayers.length || 1;
-  let cols = Math.ceil(Math.sqrt(N*16/9));
-  let rows = Math.ceil(N/cols);
-  let margin = 12;
-  let cellW = (1280-margin*2)/cols;
-  let cellH = (720-margin*2)/rows;
-  let size = 24;
-
-  previewCtx.clearRect(0,0,1280,720);
-
-  allPlayers.forEach((pl, i) => {
-    let col = i%cols;
-    let row = Math.floor(i/cols);
-    let x = margin + cellW*col + cellW/2;
-    let y = margin + cellH*row + cellH/2;
-    let img = new Image();
-    img.src = pl.image || '';
-    img.onload = () => {
-      previewCtx.save();
-      previewCtx.beginPath();
-      previewCtx.arc(x, y, size/2, 0, 2*Math.PI);
-      previewCtx.closePath();
-      previewCtx.clip();
-      previewCtx.drawImage(img, x-size/2, y-size/2, size, size);
-      previewCtx.restore();
-    };
-    img.onerror = () => {
-      previewCtx.save();
-      previewCtx.beginPath();
-      previewCtx.arc(x, y, size/2, 0, 2*Math.PI);
-      previewCtx.closePath();
-      previewCtx.clip();
-      previewCtx.fillStyle = "#777";
-      previewCtx.fill();
-      previewCtx.restore();
-    };
-  });
-
-  setTimeout(()=> {
-    previewDiv.style.display = "none";
-    startGame();
-  }, 3000);
-}
+// Ejemplo de configuración de jugadores y bots
+// playerConfig = [{name: "user1", image: "img1.png", health: 8, isBot: false}, ...];
+// botsCount = 5; botImageDataURL = "imgBot.png";
 
 // --- JUEGO PRINCIPAL ---
 function startGame() {
@@ -200,24 +37,15 @@ function startGame() {
   let minSize = 18;
   players = [];
   let positions = [];
-  // ÁREA CENTRAL DEL CANVAS (evita esquinas)
-  let marginX = gameSize.w * 0.17;
-  let marginY = gameSize.h * 0.17;
-  let centerArea = {
-    x: marginX,
-    y: marginY,
-    w: gameSize.w - marginX * 2,
-    h: gameSize.h - marginY * 2
-  };
-  // Posiciones aleatorias dentro del área central SIN SOBREPOSICIÓN
+  // Posiciones iniciales SOLO dentro del área central
   for(let i=0; i<N; i++) {
     let placed = false;
     let attempts = 0;
     while(!placed && attempts<1000) {
       attempts++;
       let size = minSize;
-      let x = Math.random()*centerArea.w + centerArea.x;
-      let y = Math.random()*centerArea.h + centerArea.y;
+      let x = Math.random()*centralArea.w + centralArea.x;
+      let y = Math.random()*centralArea.h + centralArea.y;
       let valid = true;
       for(let p of positions) {
         let dx = x-p.x, dy = y-p.y;
@@ -231,18 +59,14 @@ function startGame() {
     }
     if(!placed) {
       let size = minSize;
-      let x = Math.random()*centerArea.w + centerArea.x;
-      let y = Math.random()*centerArea.h + centerArea.y;
+      let x = Math.random()*centralArea.w + centralArea.x;
+      let y = Math.random()*centralArea.h + centralArea.y;
       positions.push({x,y});
       players.push(new Player(allPlayers[i], size, x, y));
     }
   }
-  mainMenu.style.display = "none";
-  gameScreen.style.display = "block";
-  leaderboardOn = true;
-  winner = null;
-  lastTime = performance.now();
   running = true;
+  lastTime = performance.now();
   requestAnimationFrame(gameLoop);
 }
 
@@ -254,9 +78,8 @@ class Player {
     this.isBot = obj.isBot || false;
     this.size = size;
     this.targetSize = size;
-    this.growSpeed = 0.18 + Math.random()*0.05;
-    this.health = obj.isBot ? 0.2 + Math.random()*0.2 : 8;
-    this.maxHealth = obj.isBot ? 0.2 + Math.random()*0.2 : 8;
+    this.health = obj.isBot ? 0.2 + Math.random()*0.3 : 8; // bots: menos vida
+    this.maxHealth = 8;
     this.alive = true;
     this.img = new Image();
     this.imgLoaded = false;
@@ -266,27 +89,31 @@ class Player {
     this.x = x;
     this.y = y;
     let angle = Math.random()*2*Math.PI;
-    let speed = globalSpeed * (0.36 + Math.random()*0.13);
+    let speed = globalSpeed * (0.45 + Math.random()*0.18); // siempre en movimiento
     this.vx = Math.cos(angle)*speed;
     this.vy = Math.sin(angle)*speed;
   }
-  growTo(newSize,dt) {
-    this.size += (newSize - this.size) * 0.07;
+
+  growTo(newSize) {
+    this.size += (newSize - this.size) * 0.08;
     this.targetSize = newSize;
   }
+
   move() {
     this.x += this.vx;
     this.y += this.vy;
-    // Rebota en los márgenes: siempre dentro del área
-    if(this.x-this.size/2 < 0){ this.x = this.size/2; this.vx = Math.abs(this.vx) || 0.1; }
-    if(this.x+this.size/2 > gameSize.w){ this.x = gameSize.w-this.size/2; this.vx = -Math.abs(this.vx) || -0.1; }
-    if(this.y-this.size/2 < 0){ this.y = this.size/2; this.vy = Math.abs(this.vy) || 0.1; }
-    if(this.y+this.size/2 > gameSize.h){ this.y = gameSize.h-this.size/2; this.vy = -Math.abs(this.vy) || -0.1; }
-    // Siempre en movimiento: si se detiene, dale nuevo impulso
-    if(Math.abs(this.vx) < 0.02) this.vx = (Math.random()-0.5)*0.18;
-    if(Math.abs(this.vy) < 0.02) this.vy = (Math.random()-0.5)*0.18;
+    // Rebote dentro del área central
+    if(this.x-this.size/2 < centralArea.x){ this.x = centralArea.x+this.size/2; this.vx = Math.abs(this.vx) || 0.1; }
+    if(this.x+this.size/2 > centralArea.x+centralArea.w){ this.x = centralArea.x+centralArea.w-this.size/2; this.vx = -Math.abs(this.vx) || -0.1; }
+    if(this.y-this.size/2 < centralArea.y){ this.y = centralArea.y+this.size/2; this.vy = Math.abs(this.vy) || 0.1; }
+    if(this.y+this.size/2 > centralArea.y+centralArea.h){ this.y = centralArea.y+centralArea.h-this.size/2; this.vy = -Math.abs(this.vy) || -0.1; }
+    // Si se detiene accidentalmente, dale impulso
+    if(Math.abs(this.vx) < 0.025) this.vx = (Math.random()-0.5)*0.24;
+    if(Math.abs(this.vy) < 0.025) this.vy = (Math.random()-0.5)*0.24;
   }
+
   draw(ctx) {
+    // Imagen circular
     ctx.save();
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.size/2, 0, 2*Math.PI);
@@ -299,25 +126,44 @@ class Player {
       ctx.fill();
     }
     ctx.restore();
-    // Solo borde blanco
+
+    // Borde blanco
     ctx.save();
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.size/2, 0, 2*Math.PI);
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 2;
     ctx.strokeStyle = "#fff";
     ctx.stroke();
     ctx.restore();
+
+    // Barra de vida arriba
+    let barWidth = this.size * 0.82;
+    let barHeight = 9;
+    let barX = this.x - barWidth/2;
+    let barY = this.y - this.size/2 - barHeight - 4;
+    // Fondo barra
+    ctx.fillStyle = "#222";
+    ctx.fillRect(barX, barY, barWidth, barHeight);
+    // Vida actual
+    let percent = Math.max(0, Math.min(1, this.health/this.maxHealth));
+    ctx.fillStyle = percent > 0.3 ? "#1aff1a" : "#ff3c3c";
+    ctx.fillRect(barX, barY, barWidth*percent, barHeight);
+    // Borde barra
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(barX, barY, barWidth, barHeight);
   }
 }
 
 // --- COLISIONES Y CRECIMIENTO NATURAL ---
-function handleCollisions(dt) {
+function handleCollisions() {
   let N = players.length;
   let minSize = 18;
-  let maxSize = 92;
+  let maxSize = 88;
+  // El tamaño crece gradualmente según quedan menos jugadores
   let newSize = minSize + (maxSize-minSize) * (1 - Math.log(N+1)/Math.log(playerConfig.length+botsCount+1));
   for(let i=0; i<N; i++){
-    players[i].growTo(newSize,dt);
+    players[i].growTo(newSize);
     for(let j=i+1; j<N; j++){
       let p1 = players[i], p2 = players[j];
       let dx = p1.x-p2.x, dy = p1.y-p2.y;
@@ -327,34 +173,29 @@ function handleCollisions(dt) {
         let overlap = minDist - dist;
         let nx = dx/(dist||1), ny = dy/(dist||1);
         // Rebote elástico
-        let k = 0.40;
+        let k = 0.45;
         p1.x += nx*overlap*k/2;
         p1.y += ny*overlap*k/2;
         p2.x -= nx*overlap*k/2;
         p2.y -= ny*overlap*k/2;
         // Intercambio de velocidad
         let v1x = p1.vx, v1y = p1.vy, v2x = p2.vx, v2y = p2.vy;
-        p1.vx = v2x*0.7 + v1x*0.2;
-        p1.vy = v2y*0.7 + v1y*0.2;
-        p2.vx = v1x*0.7 + v2x*0.2;
-        p2.vy = v1y*0.7 + v2y*0.2;
-        // Daño
-        p1.health -= p1.isBot ? 0.16 : 0.016;
-        p2.health -= p2.isBot ? 0.16 : 0.016;
+        p1.vx = v2x*0.7 + v1x*0.25;
+        p1.vy = v2y*0.7 + v1y*0.25;
+        p2.vx = v1x*0.7 + v2x*0.25;
+        p2.vy = v1y*0.7 + v2y*0.25;
+        // Daño (bots reciben mucho más daño)
+        p1.health -= p1.isBot ? 0.18 : 0.017;
+        p2.health -= p2.isBot ? 0.18 : 0.017;
       }
     }
     // Limites: nunca salen del área
-    if(players[i].x-players[i].size/2 < 0){ players[i].x = players[i].size/2; players[i].vx = Math.abs(players[i].vx) || 0.1; }
-    if(players[i].x+players[i].size/2 > gameSize.w){ players[i].x = gameSize.w-players[i].size/2; players[i].vx = -Math.abs(players[i].vx) || -0.1; }
-    if(players[i].y-players[i].size/2 < 0){ players[i].y = players[i].size/2; players[i].vy = Math.abs(players[i].vy) || 0.1; }
-    if(players[i].y+players[i].size/2 > gameSize.h){ players[i].y = gameSize.h-players[i].size/2; players[i].vy = -Math.abs(players[i].vy) || -0.1; }
+    if(players[i].x-players[i].size/2 < centralArea.x){ players[i].x = centralArea.x+players[i].size/2; players[i].vx = Math.abs(players[i].vx) || 0.1; }
+    if(players[i].x+players[i].size/2 > centralArea.x+centralArea.w){ players[i].x = centralArea.x+centralArea.w-players[i].size/2; players[i].vx = -Math.abs(players[i].vx) || -0.1; }
+    if(players[i].y-players[i].size/2 < centralArea.y){ players[i].y = centralArea.y+players[i].size/2; players[i].vy = Math.abs(players[i].vy) || 0.1; }
+    if(players[i].y+players[i].size/2 > centralArea.y+centralArea.h){ players[i].y = centralArea.y+centralArea.h-players[i].size/2; players[i].vy = -Math.abs(players[i].vy) || -0.1; }
   }
   players = players.filter(p=>p.health>0);
-}
-
-// --- LEADERBOARD ---
-function drawLeaderboard() {
-  leaderboardDiv.style.display = "none";
 }
 
 // --- GAME LOOP ---
@@ -367,24 +208,17 @@ function gameLoop(ts){
     p.move();
     p.draw(ctx);
   }
-  handleCollisions(dt);
-  drawLeaderboard();
+  handleCollisions();
 
-  // Contador de vivos (solo texto blanco arriba izquierda)
-  leftInfoDiv.style.background = "none";
-  leftInfoDiv.style.color = "#fff";
-  leftInfoDiv.style.fontWeight = "bold";
-  leftInfoDiv.style.fontSize = "31px";
-  leftInfoDiv.style.borderRadius = "0";
-  leftInfoDiv.style.padding = "0";
-  leftInfoDiv.style.left = "22px";
-  leftInfoDiv.style.top = "22px";
-  leftInfoDiv.innerText = `Vivos: ${players.length}`;
+  // Contador de vivos
+  ctx.font = "34px Segoe UI, Arial, sans-serif";
+  ctx.fillStyle = "#fff";
+  ctx.textAlign = "left";
+  ctx.fillText(`Vivos: ${players.length}`, 22, 48);
 
   if(running !== false && players.length>1){
     requestAnimationFrame(gameLoop);
   }else if(players.length==1){
-    leaderboardOn = false;
     showWinner(players[0]);
   }
 }
@@ -392,21 +226,15 @@ function gameLoop(ts){
 // --- GANADOR: IMAGEN CIRCULAR + MENSAJE ---
 function showWinner(winner){
   ctx.clearRect(0,0,gameSize.w,gameSize.h);
-
-  // Fondo oscuro
   ctx.fillStyle = "#111";
   ctx.fillRect(0, 0, gameSize.w, gameSize.h);
 
-  // Nombre del ganador con @ si no lo tiene
   let winnerTag = winner.name.startsWith('@') ? winner.name : '@' + winner.name;
-
-  // Felicidades @nombre (arriba)
   ctx.font = "54px Segoe UI, Arial, sans-serif";
   ctx.fillStyle = "#FFD700";
   ctx.textAlign = "center";
   ctx.fillText(`¡Felicidades ${winnerTag}!`, gameSize.w/2, 120);
 
-  // Imagen circular, centrada (sin fondo blanco)
   ctx.save();
   ctx.beginPath();
   ctx.arc(gameSize.w/2, gameSize.h/2, 140, 0, 2*Math.PI);
@@ -415,39 +243,19 @@ function showWinner(winner){
   if (winner.imgLoaded && winner.img) {
     ctx.drawImage(winner.img, gameSize.w/2-140, gameSize.h/2-140, 280, 280);
   } else {
-    // Si no hay imagen, muestra círculo gris
     ctx.fillStyle = "#777";
     ctx.fillRect(gameSize.w/2-140, gameSize.h/2-140, 280, 280);
   }
   ctx.restore();
 
-  // ¡Eres el campeón!
   ctx.font = "28px Segoe UI, Arial";
   ctx.fillStyle = "#fff";
-  ctx.textAlign = "center";
   ctx.fillText("¡Eres el campeón!", gameSize.w/2, gameSize.h/2 + 180);
 
-  // @peleadeseguidores
   ctx.font = "26px Segoe UI, Arial";
   ctx.fillStyle = "#FFD700";
-  ctx.textAlign = "center";
   ctx.fillText("@peleadeseguidores", gameSize.w/2, gameSize.h/2 + 228);
 }
 
-// --- RECTÁNGULO REDONDEADO ---
-function roundRect(ctx,x,y,w,h,r) {
-  ctx.moveTo(x+r, y);
-  ctx.lineTo(x+w-r, y);
-  ctx.quadraticCurveTo(x+w, y, x+w, y+r);
-  ctx.lineTo(x+w, y+h-r);
-  ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
-  ctx.lineTo(x+r, y+h);
-  ctx.quadraticCurveTo(x, y+h, x, y+h-r);
-  ctx.lineTo(x, y+r);
-  ctx.quadraticCurveTo(x, y, x+r, y);
-}
-
 // --- INICIALIZACIÓN ---
-window.onload = () => {
-  syncPlayers();
-};
+// startGame() debe ser llamado con la configuración lista.
