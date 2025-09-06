@@ -80,9 +80,9 @@
       position: absolute;
       left: 22px;
       top: 22px;
-      font-size: 31px;
+      font-size: 21px;
       font-weight: bold;
-      color: #fff;
+      color: #FFD700;
       z-index: 5;
       pointer-events: none;
       text-shadow: 2px 2px 8px #000A;
@@ -202,13 +202,12 @@
         <label for="botsCount" style="font-size:19px;color:#FFD700;">Bots:</label>
         <input id="botsCount" type="number" min="0" max="99" value="0" />
         <label for="speedInput" style="font-size:19px;color:#FFD700;">Velocidad:</label>
-        <input id="speedInput" type="number" min="0.05" max="1.0" step="0.01" value="0.14" />
+        <input id="speedInput" type="number" min="0.05" max="1.0" step="0.01" value="0.36" />
         <br><br>
         <label for="botImageFile" style="font-size:19px;color:#FFD700;">Imagen bots:</label>
         <input type="file" id="botImageFile" accept="image/*" />
         <button id="setBotImgBtn" onclick="setBotImage()">Cargar</button>
         <br><br>
-        <!-- Aquí aparece la lista de jugadores para editar vida -->
         <div id="player-list"></div>
       </div>
       <button class="menu-btn" onclick="showPreview()">¡Iniciar pelea!</button>
