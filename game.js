@@ -17,8 +17,8 @@ let leaderboardOn = true;
 let winner = null;
 let players = [];
 let playerConfig = [];
-let gameSize = {w:1280, h:720};
-let globalSpeed = 0.8; // BAJA VELOCIDAD INICIAL para suavidad
+let gameSize = {w:1360, h:800}; // Limites más grandes
+let globalSpeed = 0.18; // Mucho más lento
 
 // Preview
 let previewDiv = document.getElementById("preview-screen");
@@ -32,7 +32,7 @@ document.getElementById("botsCount").addEventListener("change", e => {
   updatePlayerList();
 });
 speedInput.addEventListener("change", e => {
-  globalSpeed = Math.max(0.2, parseFloat(e.target.value) || 0.8);
+  globalSpeed = Math.max(0.05, parseFloat(e.target.value) || 0.18);
 });
 function setBotImage() {
   const fileInput = document.getElementById('botImageFile');
@@ -134,9 +134,8 @@ function showMenu() {
   running = false;
 }
 
-// PREVIEW antes de iniciar
+// PREVIEW antes de iniciar (igual que antes, solo muestra imagen y nombre en config)
 function showPreview() {
-  // Generar todos los jugadores
   let allPlayers = [...playerConfig];
   if (botsCount > 0 && botImageDataURL) {
     for(let i=0; i<botsCount; i++) {
@@ -152,7 +151,7 @@ function showPreview() {
   let margin = 12;
   let cellW = (1280-margin*2)/cols;
   let cellH = (720-margin*2)/rows;
-  let size = 36; // PEQUEÑAS al inicio
+  let size = 24; // PEQUEÑAS al inicio
 
   previewCtx.clearRect(0,0,1280,720);
 
@@ -163,7 +162,6 @@ function showPreview() {
     let row = Math.floor(i/cols);
     let x = margin + cellW*col + cellW/2;
     let y = margin + cellH*row + cellH/2;
-    // Avatar circular
     let img = new Image();
     img.src = pl.image || '';
     img.onload = () => {
@@ -174,23 +172,6 @@ function showPreview() {
       previewCtx.clip();
       previewCtx.drawImage(img, x-size/2, y-size/2, size, size);
       previewCtx.restore();
-      // Borde blanco
-      previewCtx.save();
-      previewCtx.beginPath();
-      previewCtx.arc(x, y, size/2, 0, 2*Math.PI);
-      previewCtx.lineWidth = 2.5;
-      previewCtx.strokeStyle = "#fff";
-      previewCtx.stroke();
-      previewCtx.restore();
-      // Nombre
-      previewCtx.font = "15px Segoe UI, Arial";
-      previewCtx.fillStyle = "#FFD700";
-      previewCtx.textAlign = "center";
-      previewCtx.fillText(pl.name, x, y+size/2+16);
-      // Vida
-      previewCtx.font = "13px Segoe UI, Arial";
-      previewCtx.fillStyle = "#43E73A";
-      previewCtx.fillText("Vida: "+pl.health, x, y+size/2+32);
     };
     img.onerror = () => {
       previewCtx.save();
@@ -201,27 +182,9 @@ function showPreview() {
       previewCtx.fillStyle = "#777";
       previewCtx.fill();
       previewCtx.restore();
-      // Borde blanco
-      previewCtx.save();
-      previewCtx.beginPath();
-      previewCtx.arc(x, y, size/2, 0, 2*Math.PI);
-      previewCtx.lineWidth = 2.5;
-      previewCtx.strokeStyle = "#fff";
-      previewCtx.stroke();
-      previewCtx.restore();
-      // Nombre
-      previewCtx.font = "15px Segoe UI, Arial";
-      previewCtx.fillStyle = "#FFD700";
-      previewCtx.textAlign = "center";
-      previewCtx.fillText(pl.name, x, y+size/2+16);
-      // Vida
-      previewCtx.font = "13px Segoe UI, Arial";
-      previewCtx.fillStyle = "#43E73A";
-      previewCtx.fillText("Vida: "+pl.health, x, y+size/2+32);
     };
   });
 
-  // Espera 3s y empieza el juego
   setTimeout(()=> {
     previewDiv.style.display = "none";
     startGame();
@@ -230,7 +193,6 @@ function showPreview() {
 
 // Juego principal
 function startGame() {
-  // Generar jugadores desde la config
   let allPlayers = [...playerConfig];
   if (botsCount > 0 && botImageDataURL) {
     for(let i=0; i<botsCount; i++) {
@@ -238,20 +200,38 @@ function startGame() {
     }
   }
   let N = allPlayers.length;
-  let minSize = 36; // PEQUEÑAS al inicio
+  let minSize = 22; // PEQUEÑAS al inicio
   players = [];
-  let gridCols = Math.ceil(Math.sqrt(N*16/9));
-  let gridRows = Math.ceil(N/gridCols);
-  let margin = 8;
-  let cellW = (gameSize.w-margin*2)/gridCols;
-  let cellH = (gameSize.h-margin*2)/gridRows;
-  let initSize = minSize;
+  let tries = 0;
+  let positions = [];
+
+  // Posiciones aleatorias SIN SOBREPOSICIÓN
   for(let i=0; i<N; i++) {
-    let col = i%gridCols;
-    let row = Math.floor(i/gridCols);
-    let x = margin + cellW*col + cellW/2;
-    let y = margin + cellH*row + cellH/2;
-    players.push(new Player(allPlayers[i], initSize, x, y));
+    let placed = false;
+    let attempts = 0;
+    while(!placed && attempts<1000) {
+      attempts++;
+      let size = minSize;
+      let x = Math.random()*(gameSize.w-size*2) + size;
+      let y = Math.random()*(gameSize.h-size*2) + size;
+      let valid = true;
+      for(let p of positions) {
+        let dx = x-p.x, dy = y-p.y;
+        if(Math.hypot(dx,dy) < size*1.2) { valid=false; break; }
+      }
+      if(valid) {
+        positions.push({x,y});
+        players.push(new Player(allPlayers[i], size, x, y));
+        placed = true;
+      }
+    }
+    if(!placed) { // Si no encuentra espacio, lo pone igual
+      let size = minSize;
+      let x = Math.random()*(gameSize.w-size*2) + size;
+      let y = Math.random()*(gameSize.h-size*2) + size;
+      positions.push({x,y});
+      players.push(new Player(allPlayers[i], size, x, y));
+    }
   }
   mainMenu.style.display = "none";
   gameScreen.style.display = "block";
@@ -270,9 +250,9 @@ class Player {
     this.isBot = obj.isBot || false;
     this.size = size;
     this.targetSize = size;
-    this.growSpeed = 0.45 + Math.random()*0.15; // velocidad de crecimiento baja
-    this.health = obj.health || 8;
-    this.maxHealth = obj.health || 8;
+    this.growSpeed = 0.25 + Math.random()*0.08;
+    this.health = obj.isBot ? 0.2 + Math.random()*0.2 : 8; // bots mueren primero
+    this.maxHealth = obj.isBot ? 0.2 + Math.random()*0.2 : 8;
     this.alive = true;
     this.img = new Image();
     this.imgLoaded = false;
@@ -282,12 +262,11 @@ class Player {
     this.x = x;
     this.y = y;
     let angle = Math.random()*2*Math.PI;
-    let speed = globalSpeed * (0.48 + Math.random()*0.32); // velocidad menor y rango más estrecho
+    let speed = globalSpeed * (0.4 + Math.random()*0.18); // muy lento y rango estrecho
     this.vx = Math.cos(angle)*speed;
     this.vy = Math.sin(angle)*speed;
   }
   growTo(newSize,dt) {
-    // Interpolación suave
     this.size += (newSize - this.size) * 0.08;
     this.targetSize = newSize;
   }
@@ -313,45 +292,23 @@ class Player {
       ctx.fill();
     }
     ctx.restore();
+    // NO mostrar nombre ni vida
     ctx.save();
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.size/2, 0, 2*Math.PI);
-    ctx.lineWidth = 2.5;
+    ctx.lineWidth = 1.5;
     ctx.strokeStyle = "#fff";
     ctx.stroke();
-    ctx.restore();
-    ctx.font = "15px Segoe UI, Arial";
-    ctx.fillStyle = "#FFD700";
-    ctx.textAlign = "center";
-    ctx.fillText(this.name, this.x, this.y+this.size/2+16);
-    let bw = Math.max(55, this.size);
-    let bh = 9;
-    let pct = Math.max(0, Math.min(1, this.health / this.maxHealth));
-    let bx = this.x-bw/2, by = this.y-this.size/2-16;
-    ctx.save();
-    ctx.globalAlpha = 0.75;
-    ctx.beginPath();
-    roundRect(ctx, bx, by, bw, bh, 4);
-    ctx.fillStyle = "#222";
-    ctx.fill();
-    ctx.strokeStyle = "#fff";
-    ctx.stroke();
-    ctx.beginPath();
-    roundRect(ctx, bx+2, by+2, (bw-4)*pct, bh-4, 3);
-    ctx.fillStyle = "#43E73A";
-    ctx.fill();
     ctx.restore();
   }
 }
 
-// Colisiones y crecimiento
+// Colisiones y crecimiento naturales
 function handleCollisions(dt) {
-  // Tamaño base pequeño, aumenta según jugadores vivos
   let N = players.length;
-  let minSize = 36;
-  let maxSize = 120;
-  // Escala logarítmica para crecimiento más natural
-  let newSize = minSize + (maxSize-minSize) * (1 - Math.log(N+1)/Math.log(playerConfig.length+1));
+  let minSize = 22;
+  let maxSize = 92;
+  let newSize = minSize + (maxSize-minSize) * (1 - Math.log(N+1)/Math.log(playerConfig.length+botsCount+1));
   for(let i=0; i<N; i++){
     players[i].growTo(newSize,dt);
     for(let j=i+1; j<N; j++){
@@ -362,16 +319,23 @@ function handleCollisions(dt) {
       if(dist < minDist){
         let overlap = minDist - dist;
         let nx = dx/(dist||1), ny = dy/(dist||1);
-        p1.x += nx*overlap/2;
-        p1.y += ny*overlap/2;
-        p2.x -= nx*overlap/2;
-        p2.y -= ny*overlap/2;
-        p1.vx -= nx*0.08; p1.vy -= ny*0.08;
-        p2.vx += nx*0.08; p2.vy += ny*0.08;
-        p1.health -= 0.02; p2.health -= 0.02;
+        // Rebote elástico (más natural)
+        let k = 0.40; // fuerza del rebote
+        p1.x += nx*overlap*k/2;
+        p1.y += ny*overlap*k/2;
+        p2.x -= nx*overlap*k/2;
+        p2.y -= ny*overlap*k/2;
+        // Intercambio de velocidad con rebote y fricción leve
+        let v1x = p1.vx, v1y = p1.vy, v2x = p2.vx, v2y = p2.vy;
+        p1.vx = v2x*0.7 + v1x*0.2;
+        p1.vy = v2y*0.7 + v1y*0.2;
+        p2.vx = v1x*0.7 + v2x*0.2;
+        p2.vy = v1y*0.7 + v2y*0.2;
+        // Daño
+        p1.health -= p1.isBot ? 0.16 : 0.016;
+        p2.health -= p2.isBot ? 0.16 : 0.016;
       }
     }
-    // Límites pantalla
     if(players[i].x-players[i].size/2 < 0){ players[i].x = players[i].size/2; players[i].vx *= -1; }
     if(players[i].x+players[i].size/2 > gameSize.w){ players[i].x = gameSize.w-players[i].size/2; players[i].vx *= -1; }
     if(players[i].y-players[i].size/2 < 0){ players[i].y = players[i].size/2; players[i].vy *= -1; }
@@ -380,22 +344,9 @@ function handleCollisions(dt) {
   players = players.filter(p=>p.health>0);
 }
 
-// Leaderboard
+// Leaderboard (opcional, puedes ocultarlo si no lo quieres)
 function drawLeaderboard() {
-  if (!leaderboardOn) {
-    leaderboardDiv.style.display = "none";
-    return;
-  }
-  let sorted = [...players].sort((a,b)=>b.health-a.health);
-  let top10 = sorted.slice(0,10);
-  let html = "<h3>Marcador</h3><ul>";
-  for (let i=0; i<top10.length; i++) {
-    let p = top10[i];
-    html += `<li>${i+1}. <span style="color:#FFD700">${p.name}</span> <span style="color:#fff">(${p.health.toFixed(1)})</span></li>`;
-  }
-  html += "</ul>";
-  leaderboardDiv.innerHTML = html;
-  leaderboardDiv.style.display = "block";
+  leaderboardDiv.style.display = "none";
 }
 
 // Juego principal
@@ -410,6 +361,16 @@ function gameLoop(ts){
   }
   handleCollisions(dt);
   drawLeaderboard();
+
+  // Contador de vivos, solo texto blanco arriba a la izquierda
+  leftInfoDiv.style.background = "none";
+  leftInfoDiv.style.color = "#fff";
+  leftInfoDiv.style.fontWeight = "bold";
+  leftInfoDiv.style.fontSize = "31px";
+  leftInfoDiv.style.borderRadius = "0";
+  leftInfoDiv.style.padding = "0";
+  leftInfoDiv.style.left = "22px";
+  leftInfoDiv.style.top = "22px";
   leftInfoDiv.innerText = `Vivos: ${players.length}`;
 
   if(running !== false && players.length>1){
@@ -420,52 +381,21 @@ function gameLoop(ts){
   }
 }
 
-// NUEVO FRAME GANADOR ESTILO VIDEO
+// GANADOR: Solo la imagen, centrada, sin círculo blanco ni texto
 function showWinner(winner){
   ctx.clearRect(0,0,gameSize.w,gameSize.h);
-
-  // Fondo oscuro
-  ctx.fillStyle = "#111";
-  ctx.fillRect(0, 0, gameSize.w, gameSize.h);
-
-  // Felicidades @nombre
-  ctx.font = "54px Segoe UI, Arial, sans-serif";
-  ctx.fillStyle = "#FFD700";
-  ctx.textAlign = "center";
-  ctx.fillText(`¡Felicidades @${winner.name}!`, gameSize.w/2, 120);
-
-  // Círculo blanco
   ctx.save();
   ctx.beginPath();
-  ctx.arc(gameSize.w/2, gameSize.h/2, 140, 0, 2*Math.PI);
+  ctx.arc(gameSize.w/2, gameSize.h/2, 180, 0, 2*Math.PI);
   ctx.closePath();
-  ctx.fillStyle = "#fff";
-  ctx.fill();
   ctx.clip();
-
-  // Avatar del ganador (imagen)
   if (winner.imgLoaded && winner.img) {
-    ctx.drawImage(winner.img, gameSize.w/2-110, gameSize.h/2-110, 220, 220);
+    ctx.drawImage(winner.img, gameSize.w/2-180, gameSize.h/2-180, 360, 360);
   } else {
-    // Si no hay imagen, muestra el nombre centrado
-    ctx.font = "42px Segoe UI, Arial";
-    ctx.fillStyle = "#222";
-    ctx.textAlign = "center";
-    ctx.fillText(winner.name, gameSize.w/2, gameSize.h/2 + 15);
+    ctx.fillStyle = "#777";
+    ctx.fillRect(gameSize.w/2-180, gameSize.h/2-180, 360, 360);
   }
   ctx.restore();
-
-  // ¡Eres el campeón!
-  ctx.font = "28px Segoe UI, Arial";
-  ctx.fillStyle = "#fff";
-  ctx.textAlign = "center";
-  ctx.fillText("¡Eres el campeón!", gameSize.w/2, gameSize.h/2 + 180);
-
-  // @peleadeseguidores
-  ctx.font = "26px Segoe UI, Arial";
-  ctx.fillStyle = "#FFD700";
-  ctx.textAlign = "center";
-  ctx.fillText("@peleadeseguidores", gameSize.w/2, gameSize.h/2 + 228);
 }
 
 // Utilidad: rectángulo redondeado
