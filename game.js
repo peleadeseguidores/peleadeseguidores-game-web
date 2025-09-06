@@ -1,10 +1,13 @@
-// Configuración
+// Pelea de Seguidores - Versión Mejorada
+
+// --- CONFIGURACIÓN ---
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 const playerListDiv = document.getElementById("player-list");
 const leftInfoDiv = document.getElementById("left-info");
 const leaderboardDiv = document.getElementById("leaderboard");
 const speedInput = document.getElementById("speedInput");
+
 let mainMenu = document.getElementById("main-menu");
 let gameScreen = document.getElementById("game-screen");
 let botsCount = 0;
@@ -17,22 +20,23 @@ let leaderboardOn = true;
 let winner = null;
 let players = [];
 let playerConfig = [];
-let gameSize = {w:1360, h:800}; // Limites más grandes
-let globalSpeed = 0.18; // Mucho más lento
+let gameSize = {w:1360, h:800}; // Más grande y central
 
-// Preview
+let globalSpeed = 0.14; // Muy lento y natural
+
+// --- PREVIEW ---
 let previewDiv = document.getElementById("preview-screen");
 let previewCanvas = document.getElementById("preview-canvas");
 let previewCtx = previewCanvas.getContext("2d");
 let previewLabel = document.getElementById("preview-label");
 
-// Gestión de UI
+// --- UI ---
 document.getElementById("botsCount").addEventListener("change", e => {
   botsCount = Math.max(0, parseInt(e.target.value) || 0);
   updatePlayerList();
 });
 speedInput.addEventListener("change", e => {
-  globalSpeed = Math.max(0.05, parseFloat(e.target.value) || 0.18);
+  globalSpeed = Math.max(0.05, parseFloat(e.target.value) || 0.14);
 });
 function setBotImage() {
   const fileInput = document.getElementById('botImageFile');
@@ -50,7 +54,6 @@ function setBotImage() {
   }
 }
 
-// Sincronización GitHub avatars
 async function fetchAvatarsFromGitHub() {
   const apiUrl = "https://api.github.com/repos/peleadeseguidores/peleadeseguidores-game-web/contents/images";
   try {
@@ -58,11 +61,10 @@ async function fetchAvatarsFromGitHub() {
       headers: { "Accept": "application/vnd.github.v3+json" }
     });
     const files = await res.json();
-    // Solo archivos de imagen
     const avatars = files
       .filter(f => f.type === "file" && f.download_url)
       .map(f => ({
-        name: f.name.replace(/\.[^/.]+$/, ""), // sin extensión
+        name: f.name.replace(/\.[^/.]+$/, ""),
         image: f.download_url,
         health: 8,
         isBot: false,
@@ -74,7 +76,6 @@ async function fetchAvatarsFromGitHub() {
   }
 }
 
-// Sincroniza los avatares desde GitHub
 async function syncPlayers() {
   syncStatus.innerText = "Sincronizando avatares desde GitHub...";
   playerConfig = await fetchAvatarsFromGitHub();
@@ -82,7 +83,6 @@ async function syncPlayers() {
   syncStatus.innerText = `Sincronizado (${playerConfig.length} avatares de GitHub)`;
 }
 
-// Pantalla de configuración
 function updatePlayerList() {
   let html = "<h4>Jugadores:</h4>";
   let allPlayers = [...playerConfig];
@@ -126,7 +126,6 @@ function deletePlayer(idx) {
   updatePlayerList();
 }
 
-// Pantalla de juego
 function showMenu() {
   mainMenu.style.display = "flex";
   gameScreen.style.display = "none";
@@ -134,7 +133,7 @@ function showMenu() {
   running = false;
 }
 
-// PREVIEW antes de iniciar (igual que antes, solo muestra imagen y nombre en config)
+// --- PREVIEW ---
 function showPreview() {
   let allPlayers = [...playerConfig];
   if (botsCount > 0 && botImageDataURL) {
@@ -151,11 +150,9 @@ function showPreview() {
   let margin = 12;
   let cellW = (1280-margin*2)/cols;
   let cellH = (720-margin*2)/rows;
-  let size = 24; // PEQUEÑAS al inicio
+  let size = 24;
 
   previewCtx.clearRect(0,0,1280,720);
-
-  let loadedImgs = Array(N).fill(false);
 
   allPlayers.forEach((pl, i) => {
     let col = i%cols;
@@ -191,7 +188,7 @@ function showPreview() {
   }, 3000);
 }
 
-// Juego principal
+// --- JUEGO PRINCIPAL ---
 function startGame() {
   let allPlayers = [...playerConfig];
   if (botsCount > 0 && botImageDataURL) {
@@ -200,20 +197,27 @@ function startGame() {
     }
   }
   let N = allPlayers.length;
-  let minSize = 22; // PEQUEÑAS al inicio
+  let minSize = 18;
   players = [];
-  let tries = 0;
   let positions = [];
-
-  // Posiciones aleatorias SIN SOBREPOSICIÓN
+  // ÁREA CENTRAL DEL CANVAS (evita esquinas)
+  let marginX = gameSize.w * 0.17;
+  let marginY = gameSize.h * 0.17;
+  let centerArea = {
+    x: marginX,
+    y: marginY,
+    w: gameSize.w - marginX * 2,
+    h: gameSize.h - marginY * 2
+  };
+  // Posiciones aleatorias dentro del área central SIN SOBREPOSICIÓN
   for(let i=0; i<N; i++) {
     let placed = false;
     let attempts = 0;
     while(!placed && attempts<1000) {
       attempts++;
       let size = minSize;
-      let x = Math.random()*(gameSize.w-size*2) + size;
-      let y = Math.random()*(gameSize.h-size*2) + size;
+      let x = Math.random()*centerArea.w + centerArea.x;
+      let y = Math.random()*centerArea.h + centerArea.y;
       let valid = true;
       for(let p of positions) {
         let dx = x-p.x, dy = y-p.y;
@@ -225,10 +229,10 @@ function startGame() {
         placed = true;
       }
     }
-    if(!placed) { // Si no encuentra espacio, lo pone igual
+    if(!placed) {
       let size = minSize;
-      let x = Math.random()*(gameSize.w-size*2) + size;
-      let y = Math.random()*(gameSize.h-size*2) + size;
+      let x = Math.random()*centerArea.w + centerArea.x;
+      let y = Math.random()*centerArea.h + centerArea.y;
       positions.push({x,y});
       players.push(new Player(allPlayers[i], size, x, y));
     }
@@ -242,7 +246,7 @@ function startGame() {
   requestAnimationFrame(gameLoop);
 }
 
-// Jugador
+// --- CLASE PLAYER ---
 class Player {
   constructor(obj, size, x, y) {
     this.name = obj.name || "Desconocido";
@@ -250,8 +254,8 @@ class Player {
     this.isBot = obj.isBot || false;
     this.size = size;
     this.targetSize = size;
-    this.growSpeed = 0.25 + Math.random()*0.08;
-    this.health = obj.isBot ? 0.2 + Math.random()*0.2 : 8; // bots mueren primero
+    this.growSpeed = 0.18 + Math.random()*0.05;
+    this.health = obj.isBot ? 0.2 + Math.random()*0.2 : 8;
     this.maxHealth = obj.isBot ? 0.2 + Math.random()*0.2 : 8;
     this.alive = true;
     this.img = new Image();
@@ -262,22 +266,25 @@ class Player {
     this.x = x;
     this.y = y;
     let angle = Math.random()*2*Math.PI;
-    let speed = globalSpeed * (0.4 + Math.random()*0.18); // muy lento y rango estrecho
+    let speed = globalSpeed * (0.36 + Math.random()*0.13);
     this.vx = Math.cos(angle)*speed;
     this.vy = Math.sin(angle)*speed;
   }
   growTo(newSize,dt) {
-    this.size += (newSize - this.size) * 0.08;
+    this.size += (newSize - this.size) * 0.07;
     this.targetSize = newSize;
   }
   move() {
     this.x += this.vx;
     this.y += this.vy;
-    // Limite pantalla
-    if(this.x-this.size/2 < 0){ this.x = this.size/2; this.vx *= -1; }
-    if(this.x+this.size/2 > gameSize.w){ this.x = gameSize.w-this.size/2; this.vx *= -1; }
-    if(this.y-this.size/2 < 0){ this.y = this.size/2; this.vy *= -1; }
-    if(this.y+this.size/2 > gameSize.h){ this.y = gameSize.h-this.size/2; this.vy *= -1; }
+    // Rebota en los márgenes: siempre dentro del área
+    if(this.x-this.size/2 < 0){ this.x = this.size/2; this.vx = Math.abs(this.vx) || 0.1; }
+    if(this.x+this.size/2 > gameSize.w){ this.x = gameSize.w-this.size/2; this.vx = -Math.abs(this.vx) || -0.1; }
+    if(this.y-this.size/2 < 0){ this.y = this.size/2; this.vy = Math.abs(this.vy) || 0.1; }
+    if(this.y+this.size/2 > gameSize.h){ this.y = gameSize.h-this.size/2; this.vy = -Math.abs(this.vy) || -0.1; }
+    // Siempre en movimiento: si se detiene, dale nuevo impulso
+    if(Math.abs(this.vx) < 0.02) this.vx = (Math.random()-0.5)*0.18;
+    if(Math.abs(this.vy) < 0.02) this.vy = (Math.random()-0.5)*0.18;
   }
   draw(ctx) {
     ctx.save();
@@ -292,7 +299,7 @@ class Player {
       ctx.fill();
     }
     ctx.restore();
-    // NO mostrar nombre ni vida
+    // Solo borde blanco
     ctx.save();
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.size/2, 0, 2*Math.PI);
@@ -303,10 +310,10 @@ class Player {
   }
 }
 
-// Colisiones y crecimiento naturales
+// --- COLISIONES Y CRECIMIENTO NATURAL ---
 function handleCollisions(dt) {
   let N = players.length;
-  let minSize = 22;
+  let minSize = 18;
   let maxSize = 92;
   let newSize = minSize + (maxSize-minSize) * (1 - Math.log(N+1)/Math.log(playerConfig.length+botsCount+1));
   for(let i=0; i<N; i++){
@@ -319,13 +326,13 @@ function handleCollisions(dt) {
       if(dist < minDist){
         let overlap = minDist - dist;
         let nx = dx/(dist||1), ny = dy/(dist||1);
-        // Rebote elástico (más natural)
-        let k = 0.40; // fuerza del rebote
+        // Rebote elástico
+        let k = 0.40;
         p1.x += nx*overlap*k/2;
         p1.y += ny*overlap*k/2;
         p2.x -= nx*overlap*k/2;
         p2.y -= ny*overlap*k/2;
-        // Intercambio de velocidad con rebote y fricción leve
+        // Intercambio de velocidad
         let v1x = p1.vx, v1y = p1.vy, v2x = p2.vx, v2y = p2.vy;
         p1.vx = v2x*0.7 + v1x*0.2;
         p1.vy = v2y*0.7 + v1y*0.2;
@@ -336,20 +343,21 @@ function handleCollisions(dt) {
         p2.health -= p2.isBot ? 0.16 : 0.016;
       }
     }
-    if(players[i].x-players[i].size/2 < 0){ players[i].x = players[i].size/2; players[i].vx *= -1; }
-    if(players[i].x+players[i].size/2 > gameSize.w){ players[i].x = gameSize.w-players[i].size/2; players[i].vx *= -1; }
-    if(players[i].y-players[i].size/2 < 0){ players[i].y = players[i].size/2; players[i].vy *= -1; }
-    if(players[i].y+players[i].size/2 > gameSize.h){ players[i].y = gameSize.h-players[i].size/2; players[i].vy *= -1; }
+    // Limites: nunca salen del área
+    if(players[i].x-players[i].size/2 < 0){ players[i].x = players[i].size/2; players[i].vx = Math.abs(players[i].vx) || 0.1; }
+    if(players[i].x+players[i].size/2 > gameSize.w){ players[i].x = gameSize.w-players[i].size/2; players[i].vx = -Math.abs(players[i].vx) || -0.1; }
+    if(players[i].y-players[i].size/2 < 0){ players[i].y = players[i].size/2; players[i].vy = Math.abs(players[i].vy) || 0.1; }
+    if(players[i].y+players[i].size/2 > gameSize.h){ players[i].y = gameSize.h-players[i].size/2; players[i].vy = -Math.abs(players[i].vy) || -0.1; }
   }
   players = players.filter(p=>p.health>0);
 }
 
-// Leaderboard (opcional, puedes ocultarlo si no lo quieres)
+// --- LEADERBOARD ---
 function drawLeaderboard() {
   leaderboardDiv.style.display = "none";
 }
 
-// Juego principal
+// --- GAME LOOP ---
 function gameLoop(ts){
   let dt = ts - lastTime;
   lastTime = ts;
@@ -362,7 +370,7 @@ function gameLoop(ts){
   handleCollisions(dt);
   drawLeaderboard();
 
-  // Contador de vivos, solo texto blanco arriba a la izquierda
+  // Contador de vivos (solo texto blanco arriba izquierda)
   leftInfoDiv.style.background = "none";
   leftInfoDiv.style.color = "#fff";
   leftInfoDiv.style.fontWeight = "bold";
@@ -381,24 +389,52 @@ function gameLoop(ts){
   }
 }
 
-// GANADOR: Solo la imagen, centrada, sin círculo blanco ni texto
+// --- GANADOR: IMAGEN CIRCULAR + MENSAJE ---
 function showWinner(winner){
   ctx.clearRect(0,0,gameSize.w,gameSize.h);
+
+  // Fondo oscuro
+  ctx.fillStyle = "#111";
+  ctx.fillRect(0, 0, gameSize.w, gameSize.h);
+
+  // Nombre del ganador con @ si no lo tiene
+  let winnerTag = winner.name.startsWith('@') ? winner.name : '@' + winner.name;
+
+  // Felicidades @nombre (arriba)
+  ctx.font = "54px Segoe UI, Arial, sans-serif";
+  ctx.fillStyle = "#FFD700";
+  ctx.textAlign = "center";
+  ctx.fillText(`¡Felicidades ${winnerTag}!`, gameSize.w/2, 120);
+
+  // Imagen circular, centrada (sin fondo blanco)
   ctx.save();
   ctx.beginPath();
-  ctx.arc(gameSize.w/2, gameSize.h/2, 180, 0, 2*Math.PI);
+  ctx.arc(gameSize.w/2, gameSize.h/2, 140, 0, 2*Math.PI);
   ctx.closePath();
   ctx.clip();
   if (winner.imgLoaded && winner.img) {
-    ctx.drawImage(winner.img, gameSize.w/2-180, gameSize.h/2-180, 360, 360);
+    ctx.drawImage(winner.img, gameSize.w/2-140, gameSize.h/2-140, 280, 280);
   } else {
+    // Si no hay imagen, muestra círculo gris
     ctx.fillStyle = "#777";
-    ctx.fillRect(gameSize.w/2-180, gameSize.h/2-180, 360, 360);
+    ctx.fillRect(gameSize.w/2-140, gameSize.h/2-140, 280, 280);
   }
   ctx.restore();
+
+  // ¡Eres el campeón!
+  ctx.font = "28px Segoe UI, Arial";
+  ctx.fillStyle = "#fff";
+  ctx.textAlign = "center";
+  ctx.fillText("¡Eres el campeón!", gameSize.w/2, gameSize.h/2 + 180);
+
+  // @peleadeseguidores
+  ctx.font = "26px Segoe UI, Arial";
+  ctx.fillStyle = "#FFD700";
+  ctx.textAlign = "center";
+  ctx.fillText("@peleadeseguidores", gameSize.w/2, gameSize.h/2 + 228);
 }
 
-// Utilidad: rectángulo redondeado
+// --- RECTÁNGULO REDONDEADO ---
 function roundRect(ctx,x,y,w,h,r) {
   ctx.moveTo(x+r, y);
   ctx.lineTo(x+w-r, y);
@@ -411,7 +447,7 @@ function roundRect(ctx,x,y,w,h,r) {
   ctx.quadraticCurveTo(x, y, x+r, y);
 }
 
-// Inicialización
+// --- INICIALIZACIÓN ---
 window.onload = () => {
   syncPlayers();
 };
