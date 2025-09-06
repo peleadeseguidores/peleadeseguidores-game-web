@@ -21,6 +21,12 @@ let playerConfig = [];
 let gameSize = {w:1280, h:720};
 let globalSpeed = 1.2;
 
+// Preview
+let previewDiv = document.getElementById("preview-screen");
+let previewCanvas = document.getElementById("preview-canvas");
+let previewCtx = previewCanvas.getContext("2d");
+let previewLabel = document.getElementById("preview-label");
+
 // Gestión de UI
 document.getElementById("botsCount").addEventListener("change", e => {
   botsCount = Math.max(0, parseInt(e.target.value) || 0);
@@ -130,8 +136,80 @@ async function syncPlayers() {
 function showMenu() {
   mainMenu.style.display = "flex";
   gameScreen.style.display = "none";
+  previewDiv.style.display = "none";
   running = false;
 }
+
+// PREVIEW antes de iniciar
+function showPreview() {
+  // Generar todos los jugadores
+  let allPlayers = [...playerConfig];
+  if (botsCount > 0 && botImageDataURL) {
+    for(let i=0; i<botsCount; i++) {
+      allPlayers.push({name:"Bot-"+(i+1), image:botImageDataURL, health:8, isBot:true});
+    }
+  }
+  previewDiv.style.display = "flex";
+  previewLabel.innerText = "Jugadores listos para la pelea";
+
+  let N = allPlayers.length || 1;
+  let cols = Math.ceil(Math.sqrt(N*16/9));
+  let rows = Math.ceil(N/cols);
+  let margin = 12;
+  let cellW = (1280-margin*2)/cols;
+  let cellH = (720-margin*2)/rows;
+  let size = Math.min(cellW, cellH)*0.78;
+
+  previewCtx.clearRect(0,0,1280,720);
+  for(let i=0; i<N; i++) {
+    let col = i%cols;
+    let row = Math.floor(i/cols);
+    let x = margin + cellW*col + cellW/2;
+    let y = margin + cellH*row + cellH/2;
+    // Avatar circular
+    previewCtx.save();
+    previewCtx.beginPath();
+    previewCtx.arc(x, y, size/2, 0, 2*Math.PI);
+    previewCtx.closePath();
+    previewCtx.clip();
+    let img = new Image();
+    img.src = allPlayers[i].image;
+    img.onload = () => {
+      previewCtx.drawImage(img, x-size/2, y-size/2, size, size);
+      // Borde blanco
+      previewCtx.restore();
+      previewCtx.save();
+      previewCtx.beginPath();
+      previewCtx.arc(x, y, size/2, 0, 2*Math.PI);
+      previewCtx.lineWidth = 2.5;
+      previewCtx.strokeStyle = "#fff";
+      previewCtx.stroke();
+      previewCtx.restore();
+
+      // Nombre
+      previewCtx.font = "15px Segoe UI, Arial";
+      previewCtx.fillStyle = "#FFD700";
+      previewCtx.textAlign = "center";
+      previewCtx.fillText(allPlayers[i].name, x, y+size/2+16);
+      // Vida
+      previewCtx.font = "13px Segoe UI, Arial";
+      previewCtx.fillStyle = "#43E73A";
+      previewCtx.fillText("Vida: "+allPlayers[i].health, x, y+size/2+32);
+    }
+    img.onerror = () => {
+      previewCtx.fillStyle = "#777";
+      previewCtx.fill();
+      previewCtx.restore();
+    }
+  }
+  // Espera 3s y empieza el juego
+  setTimeout(()=> {
+    previewDiv.style.display = "none";
+    startGame();
+  }, 3000);
+}
+
+// Juego principal
 function startGame() {
   // Generar jugadores desde la config
   let allPlayers = [...playerConfig];
@@ -142,22 +220,33 @@ function startGame() {
   }
   // Ajustar tamaño global para que entren todos
   let N = allPlayers.length;
-  let minSize = Math.max(40, Math.min((gameSize.w*gameSize.h)/(N*250), 80));
+  let minSize = Math.max(42, Math.min((gameSize.w*gameSize.h)/(N*230), 82));
   players = [];
+  let gridCols = Math.ceil(Math.sqrt(N*16/9));
+  let gridRows = Math.ceil(N/gridCols);
+  let margin = 8;
+  let cellW = (gameSize.w-margin*2)/gridCols;
+  let cellH = (gameSize.h-margin*2)/gridRows;
+  let initSize = Math.min(cellW, cellH)*0.75;
   for(let i=0; i<N; i++) {
-    players.push(new Player(allPlayers[i], minSize));
+    let col = i%gridCols;
+    let row = Math.floor(i/gridCols);
+    let x = margin + cellW*col + cellW/2;
+    let y = margin + cellH*row + cellH/2;
+    players.push(new Player(allPlayers[i], minSize, x, y));
   }
   mainMenu.style.display = "none";
   gameScreen.style.display = "block";
   leaderboardOn = true;
   winner = null;
   lastTime = performance.now();
+  running = true;
   requestAnimationFrame(gameLoop);
 }
 
 // Jugador
 class Player {
-  constructor(obj, size) {
+  constructor(obj, size, x, y) {
     this.name = obj.name || "Desconocido";
     this.imageUrl = obj.image;
     this.isBot = obj.isBot || false;
@@ -167,22 +256,17 @@ class Player {
     this.health = obj.health || 8;
     this.maxHealth = obj.health || 8;
     this.alive = true;
-    this.img = null; this.imgLoaded = false;
-    this.x = Math.random()*(gameSize.w-size*2)+size;
-    this.y = Math.random()*(gameSize.h-size*2)+size;
+    this.img = new Image();
+    this.imgLoaded = false;
+    this.img.src = this.imageUrl;
+    this.img.onload = () => { this.imgLoaded = true; };
+    this.img.onerror = () => { this.imgLoaded = false; };
+    this.x = x;
+    this.y = y;
     let angle = Math.random()*2*Math.PI;
     let speed = globalSpeed * (0.7 + Math.random()*0.6); // velocidad configurable
     this.vx = Math.cos(angle)*speed;
     this.vy = Math.sin(angle)*speed;
-    // Cargar imagen
-    if (this.imageUrl) {
-      let img = new Image();
-      img.src = this.imageUrl;
-      img.onload = () => { this.imgLoaded = true; this.img = img; };
-      img.onerror = () => { this.imgLoaded = false; };
-    } else {
-      this.imgLoaded = false;
-    }
   }
   growTo(newSize,dt) {
     if (this.size < newSize) {
@@ -207,7 +291,7 @@ class Player {
     ctx.arc(this.x, this.y, this.size/2, 0, 2*Math.PI);
     ctx.closePath();
     ctx.clip();
-    if (this.img && this.imgLoaded) {
+    if (this.imgLoaded) {
       ctx.drawImage(this.img, this.x-this.size/2, this.y-this.size/2, this.size, this.size);
     } else {
       ctx.fillStyle = "#777";
@@ -248,7 +332,7 @@ class Player {
   }
 }
 
-// Colisiones realistas (se empujan y no atraviesan)
+// Colisiones tipo bolas de billar
 function handleCollisions(dt) {
   let growFactor = Math.min(1.25, 1 + 0.25*(players.length/Math.max(2,playerConfig.length + botsCount)));
   let newSize = Math.max(48, Math.min((gameSize.w*gameSize.h)/(players.length*260), 120))*growFactor;
@@ -263,13 +347,25 @@ function handleCollisions(dt) {
         // Separar (colisión realista)
         let overlap = minDist - dist;
         let nx = dx/(dist||1), ny = dy/(dist||1);
+        // Empuje
         p1.x += nx*overlap/2;
         p1.y += ny*overlap/2;
         p2.x -= nx*overlap/2;
         p2.y -= ny*overlap/2;
-        // Rebote y daño
-        p1.vx -= nx*0.12; p1.vy -= ny*0.12;
-        p2.vx += nx*0.12; p2.vy += ny*0.12;
+        // Rebote tipo billar: transferencia de velocidad
+        let v1 = {x:p1.vx, y:p1.vy};
+        let v2 = {x:p2.vx, y:p2.vy};
+        // Proyección en el eje de colisión
+        let dot1 = v1.x*nx + v1.y*ny;
+        let dot2 = v2.x*nx + v2.y*ny;
+        // Intercambiar componentes sobre el eje
+        let v1p = dot2;
+        let v2p = dot1;
+        p1.vx += (v1p-dot1)*0.8;
+        p1.vy += (v1p-dot1)*0.8;
+        p2.vx += (v2p-dot2)*0.8;
+        p2.vy += (v2p-dot2)*0.8;
+        // Daño
         p1.health -= 0.02; p2.health -= 0.02;
       }
     }
@@ -332,7 +428,7 @@ function showWinner(winner){
   ctx.arc(0,0,180,0,2*Math.PI);
   ctx.closePath();
   ctx.clip();
-  if (winner.img && winner.imgLoaded) {
+  if (winner.imgLoaded) {
     ctx.drawImage(winner.img, -180, -180, 360, 360);
   } else {
     ctx.fillStyle = "#777";
