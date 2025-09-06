@@ -18,7 +18,7 @@ let winner = null;
 let players = [];
 let playerConfig = [];
 let gameSize = {w:1280, h:720};
-let globalSpeed = 1.2;
+let globalSpeed = 0.8; // BAJA VELOCIDAD INICIAL para suavidad
 
 // Preview
 let previewDiv = document.getElementById("preview-screen");
@@ -32,7 +32,7 @@ document.getElementById("botsCount").addEventListener("change", e => {
   updatePlayerList();
 });
 speedInput.addEventListener("change", e => {
-  globalSpeed = Math.max(0.2, parseFloat(e.target.value) || 1.2);
+  globalSpeed = Math.max(0.2, parseFloat(e.target.value) || 0.8);
 });
 function setBotImage() {
   const fileInput = document.getElementById('botImageFile');
@@ -152,7 +152,7 @@ function showPreview() {
   let margin = 12;
   let cellW = (1280-margin*2)/cols;
   let cellH = (720-margin*2)/rows;
-  let size = Math.min(cellW, cellH)*0.78;
+  let size = 36; // PEQUEÑAS al inicio
 
   previewCtx.clearRect(0,0,1280,720);
 
@@ -237,22 +237,21 @@ function startGame() {
       allPlayers.push({name:"Bot-"+(i+1), image:botImageDataURL, health:8, isBot:true});
     }
   }
-  // Ajustar tamaño global para que entren todos
   let N = allPlayers.length;
-  let minSize = Math.max(42, Math.min((gameSize.w*gameSize.h)/(N*230), 82));
+  let minSize = 36; // PEQUEÑAS al inicio
   players = [];
   let gridCols = Math.ceil(Math.sqrt(N*16/9));
   let gridRows = Math.ceil(N/gridCols);
   let margin = 8;
   let cellW = (gameSize.w-margin*2)/gridCols;
   let cellH = (gameSize.h-margin*2)/gridRows;
-  let initSize = Math.min(cellW, cellH)*0.75;
+  let initSize = minSize;
   for(let i=0; i<N; i++) {
     let col = i%gridCols;
     let row = Math.floor(i/gridCols);
     let x = margin + cellW*col + cellW/2;
     let y = margin + cellH*row + cellH/2;
-    players.push(new Player(allPlayers[i], minSize, x, y));
+    players.push(new Player(allPlayers[i], initSize, x, y));
   }
   mainMenu.style.display = "none";
   gameScreen.style.display = "block";
@@ -271,28 +270,25 @@ class Player {
     this.isBot = obj.isBot || false;
     this.size = size;
     this.targetSize = size;
-    this.growSpeed = 1.7 + Math.random()*1.2;
+    this.growSpeed = 0.45 + Math.random()*0.15; // velocidad de crecimiento baja
     this.health = obj.health || 8;
     this.maxHealth = obj.health || 8;
     this.alive = true;
     this.img = new Image();
     this.imgLoaded = false;
     this.img.src = this.imageUrl || '';
-    // NO crossOrigin
     this.img.onload = () => { this.imgLoaded = true; };
     this.img.onerror = () => { this.imgLoaded = false; };
     this.x = x;
     this.y = y;
     let angle = Math.random()*2*Math.PI;
-    let speed = globalSpeed * (0.7 + Math.random()*0.6);
+    let speed = globalSpeed * (0.48 + Math.random()*0.32); // velocidad menor y rango más estrecho
     this.vx = Math.cos(angle)*speed;
     this.vy = Math.sin(angle)*speed;
   }
   growTo(newSize,dt) {
-    if (this.size < newSize) {
-      this.size += 0.6 * dt/16;
-      if (this.size > newSize) this.size = newSize;
-    }
+    // Interpolación suave
+    this.size += (newSize - this.size) * 0.08;
     this.targetSize = newSize;
   }
   move() {
@@ -348,13 +344,17 @@ class Player {
   }
 }
 
-// Colisiones (lógica anterior, rebote simple)
+// Colisiones y crecimiento
 function handleCollisions(dt) {
-  let growFactor = Math.min(1.25, 1 + 0.25*(players.length/Math.max(2,playerConfig.length + botsCount)));
-  let newSize = Math.max(48, Math.min((gameSize.w*gameSize.h)/(players.length*260), 120))*growFactor;
-  for(let i=0; i<players.length; i++){
+  // Tamaño base pequeño, aumenta según jugadores vivos
+  let N = players.length;
+  let minSize = 36;
+  let maxSize = 120;
+  // Escala logarítmica para crecimiento más natural
+  let newSize = minSize + (maxSize-minSize) * (1 - Math.log(N+1)/Math.log(playerConfig.length+1));
+  for(let i=0; i<N; i++){
     players[i].growTo(newSize,dt);
-    for(let j=i+1; j<players.length; j++){
+    for(let j=i+1; j<N; j++){
       let p1 = players[i], p2 = players[j];
       let dx = p1.x-p2.x, dy = p1.y-p2.y;
       let dist = Math.hypot(dx, dy);
@@ -366,11 +366,12 @@ function handleCollisions(dt) {
         p1.y += ny*overlap/2;
         p2.x -= nx*overlap/2;
         p2.y -= ny*overlap/2;
-        p1.vx -= nx*0.12; p1.vy -= ny*0.12;
-        p2.vx += nx*0.12; p2.vy += ny*0.12;
+        p1.vx -= nx*0.08; p1.vy -= ny*0.08;
+        p2.vx += nx*0.08; p2.vy += ny*0.08;
         p1.health -= 0.02; p2.health -= 0.02;
       }
     }
+    // Límites pantalla
     if(players[i].x-players[i].size/2 < 0){ players[i].x = players[i].size/2; players[i].vx *= -1; }
     if(players[i].x+players[i].size/2 > gameSize.w){ players[i].x = gameSize.w-players[i].size/2; players[i].vx *= -1; }
     if(players[i].y-players[i].size/2 < 0){ players[i].y = players[i].size/2; players[i].vy *= -1; }
@@ -419,42 +420,52 @@ function gameLoop(ts){
   }
 }
 
-// Ganador
+// NUEVO FRAME GANADOR ESTILO VIDEO
 function showWinner(winner){
   ctx.clearRect(0,0,gameSize.w,gameSize.h);
+
+  // Fondo oscuro
+  ctx.fillStyle = "#111";
+  ctx.fillRect(0, 0, gameSize.w, gameSize.h);
+
+  // Felicidades @nombre
+  ctx.font = "54px Segoe UI, Arial, sans-serif";
+  ctx.fillStyle = "#FFD700";
+  ctx.textAlign = "center";
+  ctx.fillText(`¡Felicidades @${winner.name}!`, gameSize.w/2, 120);
+
+  // Círculo blanco
   ctx.save();
-  ctx.translate(gameSize.w/2, gameSize.h/2);
   ctx.beginPath();
-  ctx.arc(0,0,180,0,2*Math.PI);
+  ctx.arc(gameSize.w/2, gameSize.h/2, 140, 0, 2*Math.PI);
   ctx.closePath();
+  ctx.fillStyle = "#fff";
+  ctx.fill();
   ctx.clip();
-  if (winner.imgLoaded) {
-    ctx.drawImage(winner.img, -180, -180, 360, 360);
+
+  // Avatar del ganador (imagen)
+  if (winner.imgLoaded && winner.img) {
+    ctx.drawImage(winner.img, gameSize.w/2-110, gameSize.h/2-110, 220, 220);
   } else {
-    ctx.fillStyle = "#777";
-    ctx.fill();
+    // Si no hay imagen, muestra el nombre centrado
+    ctx.font = "42px Segoe UI, Arial";
+    ctx.fillStyle = "#222";
+    ctx.textAlign = "center";
+    ctx.fillText(winner.name, gameSize.w/2, gameSize.h/2 + 15);
   }
   ctx.restore();
 
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(gameSize.w/2, gameSize.h/2, 180, 0, 2*Math.PI);
-  ctx.lineWidth = 8;
-  ctx.strokeStyle = "#FFD700";
-  ctx.stroke();
-  ctx.restore();
+  // ¡Eres el campeón!
+  ctx.font = "28px Segoe UI, Arial";
+  ctx.fillStyle = "#fff";
+  ctx.textAlign = "center";
+  ctx.fillText("¡Eres el campeón!", gameSize.w/2, gameSize.h/2 + 180);
 
-  ctx.font = "58px Segoe UI, Arial";
+  // @peleadeseguidores
+  ctx.font = "26px Segoe UI, Arial";
   ctx.fillStyle = "#FFD700";
   ctx.textAlign = "center";
-  ctx.fillText("¡Ganador!", gameSize.w/2, gameSize.h/2-160);
-  ctx.fillStyle = "#fff";
-  ctx.font = "44px Segoe UI, Arial";
-  ctx.fillText(winner.name, gameSize.w/2, gameSize.h/2+210);
-  ctx.font = "34px Segoe UI, Arial";
-  ctx.fillText("@peleadeseguidores", gameSize.w/2, gameSize.h/2+270);
-  ctx.font = "24px Segoe UI, Arial";
-  ctx.fillText("Configurar para reiniciar", gameSize.w/2, gameSize.h/2+320);
+  ctx.fillText("@peleadeseguidores", gameSize.w/2, gameSize.h/2 + 228);
 }
 
 // Utilidad: rectángulo redondeado
