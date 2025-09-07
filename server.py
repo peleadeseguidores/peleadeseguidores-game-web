@@ -1,52 +1,68 @@
 import os
-from flask import Flask, request, jsonify
+import base64
 import requests
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
-GITHUB_API_URL = "https://api.github.com/repos/peleadeseguidores/peleadeseguidores-game-web/contents/images"
+GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
+GITHUB_REPO = "peleadeseguidores/peleadeseguidores-game-web"
+IMAGES_PATH = "images"
 
-@app.route('/api/avatar', methods=['POST'])
-def subir_avatar():
-    data = request.get_json()
-    nombre = data.get('nombre', '').strip()
-    base64img = data.get('base64')
-    mimetype = data.get('mimetype', 'image/png')
-
-    if not nombre or not base64img:
-        return jsonify({"error": "Nombre y base64 requeridos"}), 400
-
-    # Limpia nombre para archivo
-    clean = nombre.replace('@','').replace(' ','_').replace('/','_')
-    ext = 'png' if mimetype == 'image/png' else 'jpg'
-    filename = f"{clean}.{ext}"
-
-    github_url = f"{GITHUB_API_URL}/{filename}"
-    body = {
-        "message": f"Avatar de {nombre} agregado automáticamente",
-        "content": base64img
+def upload_image_to_github(image_bytes, filename, username):
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{IMAGES_PATH}/{username}_{filename}"
+    headers = {
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github+json"
     }
+    content = base64.b64encode(image_bytes).decode('utf-8')
+    data = {
+        "message": f"Subir imagen de {username}",
+        "content": content
+    }
+    response = requests.put(url, headers=headers, json=data)
+    return response
 
-    # Verifica si ya existe para obtener SHA
-    r = requests.get(github_url, headers={"Authorization": f"token {GITHUB_TOKEN}"})
-    if r.status_code == 200:
-        sha = r.json().get("sha")
-        body["sha"] = sha
+@app.route("/api/avatar", methods=["POST"])
+def upload_avatar():
+    data = request.get_json()
+    if not data or "nombre" not in data or "base64" not in data or "mimetype" not in data:
+        return jsonify({"error": "Datos insuficientes"}), 400
 
-    # Subir avatar
-    resp = requests.put(
-        github_url,
-        headers={
-            "Authorization": f"token {GITHUB_TOKEN}",
-            "Content-Type": "application/json",
-            "Accept": "application/vnd.github.v3+json"
-        },
-        json=body
-    )
-    if resp.status_code in [200,201]:
-        return jsonify(resp.json())
-    return jsonify({"error": resp.text}), resp.status_code
+    nombre = data["nombre"].strip().replace("@", "").replace(" ", "_")
+    base64_img = data["base64"]
+    mimetype = data["mimetype"]
+
+    ext = {
+        "image/png": ".png",
+        "image/jpeg": ".jpg",
+        "image/jpg": ".jpg"
+    }.get(mimetype, ".png")
+
+    filename = f"{nombre}{ext}"
+    try:
+        image_bytes = base64.b64decode(base64_img)
+    except Exception as e:
+        return jsonify({"error": "La imagen no es válida"}), 400
+
+    response = upload_image_to_github(image_bytes, filename, nombre)
+    if response.status_code in [201, 200]:
+        data_resp = response.json()
+        image_url = data_resp.get("content", {}).get("download_url", "")
+        return jsonify({
+            "message": "Imagen subida correctamente",
+            "url": image_url,
+            "name": nombre
+        }), 200
+    else:
+        return jsonify({
+            "error": "No se pudo subir la imagen",
+            "details": response.json()
+        }), 500
+
+@app.route("/", methods=["GET"])
+def home():
+    return "API para subir nombre y foto a GitHub repo", 200
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    app.run(host="0.0.0.0", port=5000)
