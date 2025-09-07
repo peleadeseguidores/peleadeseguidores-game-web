@@ -1,21 +1,13 @@
-# Pelea Extrema Web
+## ⚠️ PROHIBICIÓN DE USO Y COPIA SIN AUTORIZACIÓN
 
-Juego de pelea de seguidores, versión web fluida y privada.
+Este proyecto, incluyendo todo su código fuente, recursos, imágenes, y cualquier archivo aquí presente, **NO puede ser copiado, distribuido, reutilizado, modificado ni explotado bajo ninguna circunstancia sin mi autorización explícita y por escrito**.
 
-## ¿Cómo usar?
-1. Abre `index.html` en tu navegador.
-2. Presiona **Jugar** para iniciar con miles de jugadores.
-3. Cambia el número de jugadores en el código (`PLAYER_COUNT` en `game.js`) a lo que desees.
+Cualquier intento de uso, copia parcial o total, distribución, publicación o adaptación de este contenido **sin permiso previo** será considerado una **violación grave de derechos**, y podrá ser perseguido legalmente.  
+No se tolera el plagio, la apropiación indebida ni el uso no autorizado, y se tomarán medidas contundentes contra cualquier persona, entidad o grupo que incurra en estos actos.
 
-## ¿Cómo activar GitHub Pages (privado)?
-- Ve a **Settings > Pages** en este repositorio.
-- Elige la rama `main` y carpeta `/root`.
-- Activa la opción "Private" (solo tú puedes ver la página).
-- Abre la URL que aparece y, si te pide login, inicia sesión con tu cuenta.
+Si tienes interés legítimo en este proyecto, **debes contactarme directamente** para solicitar autorización.  
+No asumas que puedes usar nada de lo aquí publicado sin respuesta formal y expresa de mi parte.
 
-## Modificaciones
-- Para poner imágenes o mejorar el menú, modifica el código JS y HTML.
-- Puedes agregar leaderboard, sincronización con Google Sheets, etc.
+**Contacto:** [https://github.com/peleadeseguidores] [Instagram: @peleadeseguidores]
 
-## Nota
-Esta página es solo para ti. No afecta ninguna otra web de tu cuenta.
+> La vigilancia es constante. No subestimes las consecuencias legales y éticas de ignorar esta advertencia.
