@@ -21,7 +21,7 @@ let winner = null;
 let players = [];
 let playerConfig = [];
 let gameSize = {w:window.innerWidth, h:window.innerHeight};
-let globalSpeed = parseFloat(speedInput.value) || 0.74;
+let globalSpeed = parseFloat(speedInput.value) || 1.35; // VELOCIDAD MÁS RÁPIDA
 let globalLives = 8;
 
 // Lapso inicial sin colisiones
@@ -54,7 +54,7 @@ document.getElementById("botsCount").addEventListener("change", e => {
   updatePlayerList();
 });
 speedInput.addEventListener("change", e => {
-  globalSpeed = Math.max(0.05, parseFloat(e.target.value) || 0.74);
+  globalSpeed = Math.max(0.05, parseFloat(e.target.value) || 1.35);
 });
 livesInput.addEventListener("change", e => {
   globalLives = Math.max(1, parseInt(e.target.value) || 8);
@@ -211,7 +211,7 @@ function startGame() {
     }
   }
   let N = allPlayers.length;
-  let minSize = 18;
+  let minSize = Math.max(10, 38 - N * 0.5);
   players = [];
   let positions = [];
   for(let i=0; i<N; i++) {
@@ -225,7 +225,7 @@ function startGame() {
       let valid = true;
       for(let p of positions) {
         let dx = x-p.x, dy = y-p.y;
-        if(Math.hypot(dx,dy) < size*1.2) { valid=false; break; }
+        if(Math.hypot(dx,dy) < size*1.6) { valid=false; break; }
       }
       if(valid) {
         positions.push({x,y});
@@ -267,12 +267,11 @@ class Player {
     this.x = x;
     this.y = y;
     let angle = Math.random()*2*Math.PI;
-    let speed = globalSpeed * (0.55 + Math.random()*0.22);
+    let speed = globalSpeed * (0.95 + Math.random()*0.11); // Más rápido
     this.vx = Math.cos(angle)*speed;
     this.vy = Math.sin(angle)*speed;
   }
 
-  // Animación suave del tamaño
   growTo(newSize) {
     this.size += (newSize - this.size) * 0.05;
     this.targetSize = newSize;
@@ -288,7 +287,6 @@ class Player {
   }
 
   draw(ctx) {
-    // Imagen circular SIN BORDES
     ctx.save();
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.size/2, 0, 2*Math.PI);
@@ -302,7 +300,7 @@ class Player {
     }
     ctx.restore();
 
-    // --- Barra de vida verde (actual) y rojo (vida perdida) ---
+    // Barra de vida verde (actual) y rojo (vida perdida)
     let barWidth = this.size * 0.84;
     let barHeight = 6;
     let barX = this.x - barWidth/2;
@@ -355,12 +353,25 @@ class Player {
 // --- COLISIONES Y CRECIMIENTO NATURAL ---
 function handleCollisions(skipCollisions = false) {
   let N = players.length;
-  let minSize = 18, maxSize = Math.min(gameSize.w, gameSize.h) * 0.21; // escala a pantalla, más grande para vertical
+  let minSize = Math.max(10, 38 - N * 0.5);
+  let maxSize = Math.min(gameSize.w, gameSize.h) * 0.19;
   let total = playerConfig.length + botsCount;
-  let frac = Math.min(1, (total-N)/(total*0.85));
-  let newSize = minSize + (maxSize-minSize) * frac;
+  let frac = 1 - (N / total);
+  let newSize = minSize + (maxSize - minSize) * frac;
+
+  // --- Ajuste: daño por colisión para que el juego dure ~50 segundos ---
+  let lives = globalLives;
+  let desiredSeconds = 50;
+  // Estimación de colisiones por segundo, ajusta según el ritmo visual 
+  let estimatedCollisionsPerSecond = Math.max(1, N * 0.09); // más colisiones si hay más jugadores
+  let damagePerCollision = Math.max(1, Math.round((lives / (estimatedCollisionsPerSecond * desiredSeconds)) * N * 0.8));
+  damagePerCollision = Math.max(1, Math.min(damagePerCollision, 4));
+
   for(let i=0; i<N; i++){
-    players[i].growTo(newSize);
+    // Crecimiento lento
+    players[i].size += (newSize - players[i].size) * 0.018;
+    players[i].targetSize = newSize;
+
     for(let j=i+1; j<N; j++){
       let p1 = players[i], p2 = players[j];
       let dx = p1.x-p2.x, dy = p1.y-p2.y;
@@ -369,10 +380,7 @@ function handleCollisions(skipCollisions = false) {
       if(dist < minDist){
         let overlap = minDist - dist;
         let nx = dx/(dist||1), ny = dy/(dist||1);
-
-        // Solo rebote si ya pasó el delay
         if (!skipCollisions) {
-          // Rebote tipo billar: intercambio de velocidad normal
           let v1 = {x: p1.vx, y: p1.vy};
           let v2 = {x: p2.vx, y: p2.vy};
           let dot1 = nx*v1.x + ny*v1.y;
@@ -383,18 +391,15 @@ function handleCollisions(skipCollisions = false) {
           p1.vy = tn1y + dot2*ny;
           p2.vx = tn2x + dot1*nx;
           p2.vy = tn2y + dot1*ny;
-
           let k = 0.5;
           p1.x += nx*overlap*k/2;
           p1.y += ny*overlap*k/2;
           p2.x -= nx*overlap*k/2;
           p2.y -= ny*overlap*k/2;
-
-          // QUITAR VIDA EN CADA COLISIÓN
-          p1.health -= 1;
-          p2.health -= 1;
+          // --- DAÑO AJUSTADO ---
+          p1.health -= damagePerCollision;
+          p2.health -= damagePerCollision;
         } else {
-          // Solo empuje suave para que no se queden pegados
           let k = 0.5;
           p1.x += nx*overlap*k/2;
           p1.y += ny*overlap*k/2;
@@ -414,8 +419,6 @@ function handleCollisions(skipCollisions = false) {
 
 // --- GAME LOOP ---
 function gameLoop(ts){
-  let dt = ts - lastTime;
-  lastTime = ts;
   ctx.clearRect(0,0,gameSize.w,gameSize.h);
 
   for(let p of players){
@@ -426,7 +429,6 @@ function gameLoop(ts){
   let skipCollisions = (performance.now() - collisionStartTime < collisionDelay);
   handleCollisions(skipCollisions);
 
-  // "Vivos" centrado arriba, pequeño y BLANCO
   ctx.font = "22px Segoe UI, Arial, sans-serif";
   ctx.fillStyle = "#fff";
   ctx.textAlign = "center";
@@ -463,11 +465,10 @@ function showWinner(winner){
   }
   ctx.restore();
 
-  // Letras horizontales arriba, AJUSTA el tamaño para que quepan
+  // Letras horizontales arriba, AJUSTA el tamaño para que no se salga del canvas
   let winnerTag = winner.name.startsWith('@') ? winner.name : '@' + winner.name;
   let felicidades = `¡Felicidades ${winnerTag}!`;
 
-  // Encuentra el font size óptimo para que no se salga del canvas
   let maxWidth = gameSize.w * 0.9;
   let fontSize = 36;
   ctx.font = `${fontSize}px Segoe UI, Arial, sans-serif`;
@@ -479,12 +480,10 @@ function showWinner(winner){
   ctx.textAlign = "center";
   ctx.fillText(felicidades, centerX, centerY - avatarRadius - 38);
 
-  // Mensaje campeón debajo de la imagen
   ctx.font = "22px Segoe UI, Arial";
   ctx.fillStyle = "#fff";
   ctx.fillText("¡Eres el campeón!", centerX, centerY + avatarRadius + 46);
 
-  // Instagram/tag pequeño más abajo
   ctx.font = "22px Segoe UI, Arial";
   ctx.fillStyle = "#FFD700";
   ctx.fillText("@peleadeseguidores", centerX, centerY + avatarRadius + 84);
