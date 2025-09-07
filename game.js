@@ -1,4 +1,4 @@
-// Version Instagram vertical, texto final horizontal, lapso inicial sin colisiones, VIVOS pequeño y blanco
+// Version Instagram vertical, letras del final siempre centradas y dentro del recuadro, lapso inicial sin colisiones, VIVOS pequeño y blanco
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -439,13 +439,13 @@ function gameLoop(ts){
   }
 }
 
-// --- GANADOR: LETRAS HORIZONTALES ---
+// --- GANADOR: LETRAS HORIZONTALES AJUSTADAS Y CENTRADAS ---
 function showWinner(winner){
   ctx.clearRect(0,0,gameSize.w,gameSize.h);
   ctx.fillStyle = "#111";
   ctx.fillRect(0, 0, gameSize.w, gameSize.h);
 
-  // Dibuja la imagen circular grande al centro
+  // Dibuja la imagen circular grande centrada
   let centerX = gameSize.w / 2;
   let centerY = gameSize.h / 2 - 40;
   let avatarRadius = Math.min(gameSize.w, gameSize.h) * 0.21;
@@ -463,12 +463,21 @@ function showWinner(winner){
   }
   ctx.restore();
 
-  // Letras horizontales arriba
+  // Letras horizontales arriba, AJUSTA el tamaño para que quepan
   let winnerTag = winner.name.startsWith('@') ? winner.name : '@' + winner.name;
-  ctx.font = "36px Segoe UI, Arial, sans-serif";
+  let felicidades = `¡Felicidades ${winnerTag}!`;
+
+  // Encuentra el font size óptimo para que no se salga del canvas
+  let maxWidth = gameSize.w * 0.9;
+  let fontSize = 36;
+  ctx.font = `${fontSize}px Segoe UI, Arial, sans-serif`;
+  while (ctx.measureText(felicidades).width > maxWidth && fontSize > 20) {
+    fontSize -= 2;
+    ctx.font = `${fontSize}px Segoe UI, Arial, sans-serif`;
+  }
   ctx.fillStyle = "#FFD700";
   ctx.textAlign = "center";
-  ctx.fillText(`¡Felicidades ${winnerTag}!`, centerX, centerY - avatarRadius - 38);
+  ctx.fillText(felicidades, centerX, centerY - avatarRadius - 38);
 
   // Mensaje campeón debajo de la imagen
   ctx.font = "22px Segoe UI, Arial";
