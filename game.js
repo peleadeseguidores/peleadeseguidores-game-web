@@ -1,4 +1,4 @@
-// Pelea de Seguidores - Sin bordes, barra vida verde/rojo, colisiones quitan vida y tamaño aumenta
+// Animación suave de tamaño + canvas ocupa toda la página + demás mejoras
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -20,10 +20,19 @@ let lastTime = 0;
 let winner = null;
 let players = [];
 let playerConfig = [];
-let gameSize = {w:1360, h:800};
-
+let gameSize = {w:window.innerWidth, h:window.innerHeight};
 let globalSpeed = parseFloat(speedInput.value) || 0.74;
 let globalLives = 8;
+
+// --- Responsive canvas ---
+function resizeCanvas() {
+  gameSize.w = window.innerWidth;
+  gameSize.h = window.innerHeight;
+  canvas.width = gameSize.w;
+  canvas.height = gameSize.h;
+}
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
 
 // --- UI listeners ---
 document.getElementById("botsCount").addEventListener("change", e => {
@@ -180,6 +189,7 @@ function showPreview() {
 
 // --- JUEGO PRINCIPAL ---
 function startGame() {
+  resizeCanvas();
   let allPlayers = [...playerConfig];
   if (botsCount > 0 && botImageDataURL) {
     for(let i=0; i<botsCount; i++) {
@@ -247,8 +257,10 @@ class Player {
     this.vy = Math.sin(angle)*speed;
   }
 
+  // Animación suave del tamaño
   growTo(newSize) {
-    this.size += (newSize - this.size) * 0.14;
+    // Interpolación suave (más lento si la diferencia es grande)
+    this.size += (newSize - this.size) * 0.05;
     this.targetSize = newSize;
   }
 
@@ -329,9 +341,9 @@ class Player {
 // --- COLISIONES Y CRECIMIENTO NATURAL ---
 function handleCollisions() {
   let N = players.length;
-  let minSize = 18, maxSize = 110;
+  let minSize = 18, maxSize = Math.min(gameSize.w, gameSize.h) * 0.08; // escala a pantalla
   let total = playerConfig.length + botsCount;
-  // Tamaño crece más al final visualmente (proporcional)
+  // Tamaño crece visualmente al irse eliminando jugadores (proporcional)
   let frac = Math.min(1, (total-N)/(total*0.85));
   let newSize = minSize + (maxSize-minSize) * frac;
   for(let i=0; i<N; i++){
@@ -357,7 +369,6 @@ function handleCollisions() {
         p2.vx = tn2x + dot1*nx;
         p2.vy = tn2y + dot1*ny;
 
-        // Empuja para que no se solapen
         let k = 0.5;
         p1.x += nx*overlap*k/2;
         p1.y += ny*overlap*k/2;
