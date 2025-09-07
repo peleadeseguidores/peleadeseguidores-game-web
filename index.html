@@ -3,11 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <title>Pelea de Seguidores</title>
-  <meta name="viewport" content="width=1360, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body {
-      background: #1a1a1a;
+    html, body {
+      width: 100vw;
+      height: 100vh;
       margin: 0;
+      padding: 0;
+      background: #1a1a1a;
       font-family: 'Segoe UI', Arial, sans-serif;
       color: #fff;
       overflow: hidden;
@@ -29,8 +32,10 @@
       border-radius: 22px;
       box-shadow: 0 0 60px #000A;
       background: #191919;
-      margin-top: 32px;
+      margin-top: 0;
       display: block;
+      width: 100vw;
+      height: 100vh;
     }
     #player-list {
       margin-top: 24px;
@@ -55,7 +60,6 @@
       border-radius: 50%;
       object-fit: cover;
       background: #444;
-      /* Quitamos el borde blanco */
       border: none;
     }
     .player-row input[type="number"] {
@@ -217,7 +221,7 @@
     </div>
   </div>
   <div id="game-screen">
-    <canvas id="game" width="1360" height="800"></canvas>
+    <canvas id="game"></canvas>
     <div id="left-info"></div>
     <div id="leaderboard"></div>
     <button style="position:absolute;top:32px;right:32px;background:#FFD700;color:#222;font-size:22px;font-weight:bold;border:none;border-radius:8px;padding:10px 24px;box-shadow:0 2px 10px #0005;z-index:10;cursor:pointer;" onclick="showMenu()">Configurar</button>
