@@ -1,4 +1,4 @@
-// Pelea de Seguidores - Rectángulo removido, control de vidas y velocidad, tamaño dinámico
+// Pelea de Seguidores - Barra de vida verde/rojo y rebote tipo billar
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -23,7 +23,7 @@ let playerConfig = [];
 let gameSize = {w:1360, h:800};
 
 // --- CONTROL GLOBAL ---
-let globalSpeed = parseFloat(speedInput.value) || 0.74; // velocidad inicial
+let globalSpeed = parseFloat(speedInput.value) || 0.74;
 let globalLives = 8;
 
 // --- UI listeners ---
@@ -104,7 +104,7 @@ function editHealth(idx,val) {
   val = Math.max(1,Math.min(99,parseInt(val)||globalLives));
   if (allPlayers[idx]) {
     if (idx < playerConfig.length) playerConfig[idx].health = val;
-    else globalLives = val; // actualiza global para bots si editan bots
+    else globalLives = val;
     updatePlayerList();
   }
 }
@@ -257,12 +257,11 @@ class Player {
     this.x += this.vx;
     this.y += this.vy;
     // Rebote en TODO el canvas
-    if(this.x-this.size/2 < 0){ this.x = this.size/2; this.vx = Math.abs(this.vx) || 0.1; }
-    if(this.x+this.size/2 > gameSize.w){ this.x = gameSize.w-this.size/2; this.vx = -Math.abs(this.vx) || -0.1; }
-    if(this.y-this.size/2 < 0){ this.y = this.size/2; this.vy = Math.abs(this.vy) || 0.1; }
-    if(this.y+this.size/2 > gameSize.h){ this.y = gameSize.h-this.size/2; this.vy = -Math.abs(this.vy) || -0.1; }
-    if(Math.abs(this.vx) < 0.025) this.vx = (Math.random()-0.5)*0.34;
-    if(Math.abs(this.vy) < 0.025) this.vy = (Math.random()-0.5)*0.34;
+    // Rebote tipo billar: invierte la velocidad (no la hace más lenta)
+    if(this.x-this.size/2 < 0){ this.x = this.size/2; this.vx = Math.abs(this.vx); }
+    if(this.x+this.size/2 > gameSize.w){ this.x = gameSize.w-this.size/2; this.vx = -Math.abs(this.vx); }
+    if(this.y-this.size/2 < 0){ this.y = this.size/2; this.vy = Math.abs(this.vy); }
+    if(this.y+this.size/2 > gameSize.h){ this.y = gameSize.h-this.size/2; this.vy = -Math.abs(this.vy); }
   }
 
   draw(ctx) {
@@ -289,12 +288,13 @@ class Player {
     ctx.stroke();
     ctx.restore();
 
-    // --- Barra de vida fina, redondeada ---
+    // --- Barra de vida verde (actual) y rojo (vida perdida) ---
     let barWidth = this.size * 0.84;
-    let barHeight = 4;
+    let barHeight = 6;
     let barX = this.x - barWidth/2;
     let barY = this.y - this.size/2 - barHeight - 5;
     let percent = Math.max(0, Math.min(1, this.health/this.maxHealth));
+    // Fondo negro
     ctx.save();
     ctx.beginPath();
     const r = barHeight/2;
@@ -307,7 +307,7 @@ class Player {
     ctx.fillStyle = "#111";
     ctx.fill();
 
-    // Barra verde (vida actual)
+    // Verde (vida actual)
     if (percent > 0) {
       ctx.beginPath();
       ctx.moveTo(barX+r, barY);
@@ -319,8 +319,7 @@ class Player {
       ctx.fillStyle = "#25ff25";
       ctx.fill();
     }
-
-    // Barra roja (vida perdida)
+    // Rojo (vida perdida)
     if (percent < 1) {
       ctx.beginPath();
       let startX = barX+barWidth*percent;
@@ -345,7 +344,6 @@ function handleCollisions() {
   let N = players.length;
   let minSize = 18, maxSize = 110;
   let total = playerConfig.length + botsCount;
-  // Tamaño crece más al final visualmente
   let frac = Math.min(1, (total-N)/(total*0.85));
   let newSize = minSize + (maxSize-minSize) * frac;
   for(let i=0; i<N; i++){
@@ -358,25 +356,38 @@ function handleCollisions() {
       if(dist < minDist){
         let overlap = minDist - dist;
         let nx = dx/(dist||1), ny = dy/(dist||1);
-        let k = 0.45;
+
+        // Rebote tipo billar: intercambio de velocidad al chocar
+        let v1 = {x: p1.vx, y: p1.vy};
+        let v2 = {x: p2.vx, y: p2.vy};
+        // Intercambia velocidades (componentes normal y tangencial)
+        let dot1 = nx*v1.x + ny*v1.y;
+        let dot2 = nx*v2.x + ny*v2.y;
+        let tn1x = v1.x - dot1*nx, tn1y = v1.y - dot1*ny;
+        let tn2x = v2.x - dot2*nx, tn2y = v2.y - dot2*ny;
+
+        // Normal: intercambia
+        p1.vx = tn1x + dot2*nx;
+        p1.vy = tn1y + dot2*ny;
+        p2.vx = tn2x + dot1*nx;
+        p2.vy = tn2y + dot1*ny;
+
+        // Empuja para que no se solapen
+        let k = 0.5;
         p1.x += nx*overlap*k/2;
         p1.y += ny*overlap*k/2;
         p2.x -= nx*overlap*k/2;
         p2.y -= ny*overlap*k/2;
-        let v1x = p1.vx, v1y = p1.vy, v2x = p2.vx, v2y = p2.vy;
-        p1.vx = v2x*0.7 + v1x*0.25;
-        p1.vy = v2y*0.7 + v1y*0.25;
-        p2.vx = v1x*0.7 + v2x*0.25;
-        p2.vy = v1y*0.7 + v2y*0.25;
+
         p1.health -= p1.isBot ? 0.18 : 0.017;
         p2.health -= p2.isBot ? 0.18 : 0.017;
       }
     }
-    // Rebote en todo el canvas
-    if(players[i].x-players[i].size/2 < 0){ players[i].x = players[i].size/2; players[i].vx = Math.abs(players[i].vx) || 0.1; }
-    if(players[i].x+players[i].size/2 > gameSize.w){ players[i].x = gameSize.w-players[i].size/2; players[i].vx = -Math.abs(players[i].vx) || -0.1; }
-    if(players[i].y-players[i].size/2 < 0){ players[i].y = players[i].size/2; players[i].vy = Math.abs(players[i].vy) || 0.1; }
-    if(players[i].y+players[i].size/2 > gameSize.h){ players[i].y = gameSize.h-players[i].size/2; players[i].vy = -Math.abs(players[i].vy) || -0.1; }
+    // Rebote en todo el canvas (billard)
+    if(players[i].x-players[i].size/2 < 0){ players[i].x = players[i].size/2; players[i].vx = Math.abs(players[i].vx);}
+    if(players[i].x+players[i].size/2 > gameSize.w){ players[i].x = gameSize.w-players[i].size/2; players[i].vx = -Math.abs(players[i].vx);}
+    if(players[i].y-players[i].size/2 < 0){ players[i].y = players[i].size/2; players[i].vy = Math.abs(players[i].vy);}
+    if(players[i].y+players[i].size/2 > gameSize.h){ players[i].y = gameSize.h-players[i].size/2; players[i].vy = -Math.abs(players[i].vy);}
   }
   players = players.filter(p=>p.health>0);
 }
@@ -393,7 +404,6 @@ function gameLoop(ts){
   }
   handleCollisions();
 
-  // Vivos: solo muestra el número actual
   ctx.font = "21px Segoe UI, Arial, sans-serif";
   ctx.fillStyle = "#FFD700";
   ctx.textAlign = "left";
@@ -440,5 +450,4 @@ function showWinner(winner){
   ctx.fillText("@peleadeseguidores", gameSize.w/2, gameSize.h/2 + 228);
 }
 
-// --- INICIALIZACIÓN ---
 window.onload = () => {};
