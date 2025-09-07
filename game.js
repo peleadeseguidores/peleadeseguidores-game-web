@@ -1,4 +1,4 @@
-// Animación suave de tamaño + canvas vertical + pantalla final vertical + sin botón configurar
+// Version Instagram vertical, texto final horizontal, lapso inicial sin colisiones, VIVOS pequeño y blanco
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -24,7 +24,11 @@ let gameSize = {w:window.innerWidth, h:window.innerHeight};
 let globalSpeed = parseFloat(speedInput.value) || 0.74;
 let globalLives = 8;
 
-// --- Canvas vertical para Instagram/Reels/Stories ---
+// Lapso inicial sin colisiones
+let collisionDelay = 3000; // ms
+let collisionStartTime = 0;
+
+// --- Canvas vertical Instagram ---
 function resizeCanvasInstagram() {
   let W = window.innerWidth;
   let H = window.innerHeight;
@@ -242,6 +246,7 @@ function startGame() {
   winner = null;
   lastTime = performance.now();
   running = true;
+  collisionStartTime = performance.now(); // <-- Lapso inicial SIN colisiones!
   requestAnimationFrame(gameLoop);
 }
 
@@ -348,7 +353,7 @@ class Player {
 }
 
 // --- COLISIONES Y CRECIMIENTO NATURAL ---
-function handleCollisions() {
+function handleCollisions(skipCollisions = false) {
   let N = players.length;
   let minSize = 18, maxSize = Math.min(gameSize.w, gameSize.h) * 0.21; // escala a pantalla, más grande para vertical
   let total = playerConfig.length + botsCount;
@@ -365,27 +370,37 @@ function handleCollisions() {
         let overlap = minDist - dist;
         let nx = dx/(dist||1), ny = dy/(dist||1);
 
-        // Rebote tipo billar: intercambio de velocidad normal
-        let v1 = {x: p1.vx, y: p1.vy};
-        let v2 = {x: p2.vx, y: p2.vy};
-        let dot1 = nx*v1.x + ny*v1.y;
-        let dot2 = nx*v2.x + ny*v2.y;
-        let tn1x = v1.x - dot1*nx, tn1y = v1.y - dot1*ny;
-        let tn2x = v2.x - dot2*nx, tn2y = v2.y - dot2*ny;
-        p1.vx = tn1x + dot2*nx;
-        p1.vy = tn1y + dot2*ny;
-        p2.vx = tn2x + dot1*nx;
-        p2.vy = tn2y + dot1*ny;
+        // Solo rebote si ya pasó el delay
+        if (!skipCollisions) {
+          // Rebote tipo billar: intercambio de velocidad normal
+          let v1 = {x: p1.vx, y: p1.vy};
+          let v2 = {x: p2.vx, y: p2.vy};
+          let dot1 = nx*v1.x + ny*v1.y;
+          let dot2 = nx*v2.x + ny*v2.y;
+          let tn1x = v1.x - dot1*nx, tn1y = v1.y - dot1*ny;
+          let tn2x = v2.x - dot2*nx, tn2y = v2.y - dot2*ny;
+          p1.vx = tn1x + dot2*nx;
+          p1.vy = tn1y + dot2*ny;
+          p2.vx = tn2x + dot1*nx;
+          p2.vy = tn2y + dot1*ny;
 
-        let k = 0.5;
-        p1.x += nx*overlap*k/2;
-        p1.y += ny*overlap*k/2;
-        p2.x -= nx*overlap*k/2;
-        p2.y -= ny*overlap*k/2;
+          let k = 0.5;
+          p1.x += nx*overlap*k/2;
+          p1.y += ny*overlap*k/2;
+          p2.x -= nx*overlap*k/2;
+          p2.y -= ny*overlap*k/2;
 
-        // QUITAR VIDA EN CADA COLISIÓN
-        p1.health -= 1;
-        p2.health -= 1;
+          // QUITAR VIDA EN CADA COLISIÓN
+          p1.health -= 1;
+          p2.health -= 1;
+        } else {
+          // Solo empuje suave para que no se queden pegados
+          let k = 0.5;
+          p1.x += nx*overlap*k/2;
+          p1.y += ny*overlap*k/2;
+          p2.x -= nx*overlap*k/2;
+          p2.y -= ny*overlap*k/2;
+        }
       }
     }
     // Rebote en todo el canvas (billard)
@@ -407,13 +422,15 @@ function gameLoop(ts){
     p.move();
     p.draw(ctx);
   }
-  handleCollisions();
+  // Lapso inicial sin colisiones
+  let skipCollisions = (performance.now() - collisionStartTime < collisionDelay);
+  handleCollisions(skipCollisions);
 
-  // "Vivos" centrado arriba
-  ctx.font = "36px Segoe UI, Arial, sans-serif";
-  ctx.fillStyle = "#FFD700";
+  // "Vivos" centrado arriba, pequeño y BLANCO
+  ctx.font = "22px Segoe UI, Arial, sans-serif";
+  ctx.fillStyle = "#fff";
   ctx.textAlign = "center";
-  ctx.fillText(`Vivos: ${players.length}`, gameSize.w/2, 48);
+  ctx.fillText(`Vivos: ${players.length}`, gameSize.w/2, 36);
 
   if(running !== false && players.length>1){
     requestAnimationFrame(gameLoop);
@@ -422,16 +439,16 @@ function gameLoop(ts){
   }
 }
 
-// --- GANADOR: IMAGEN CIRCULAR + MENSAJE VERTICAL INSTAGRAM ---
+// --- GANADOR: LETRAS HORIZONTALES ---
 function showWinner(winner){
   ctx.clearRect(0,0,gameSize.w,gameSize.h);
   ctx.fillStyle = "#111";
   ctx.fillRect(0, 0, gameSize.w, gameSize.h);
 
-  // Imagen circular grande centrada vertical
+  // Dibuja la imagen circular grande al centro
   let centerX = gameSize.w / 2;
-  let centerY = gameSize.h / 2 - 120;
-  let avatarRadius = Math.min(gameSize.w, gameSize.h) * 0.22;
+  let centerY = gameSize.h / 2 - 40;
+  let avatarRadius = Math.min(gameSize.w, gameSize.h) * 0.21;
 
   ctx.save();
   ctx.beginPath();
@@ -446,26 +463,22 @@ function showWinner(winner){
   }
   ctx.restore();
 
-  // Nombre ganador (grande, centrado debajo del avatar)
+  // Letras horizontales arriba
   let winnerTag = winner.name.startsWith('@') ? winner.name : '@' + winner.name;
-  ctx.font = "54px Segoe UI, Arial, sans-serif";
+  ctx.font = "36px Segoe UI, Arial, sans-serif";
   ctx.fillStyle = "#FFD700";
   ctx.textAlign = "center";
-  ctx.fillText(`¡Felicidades!`, centerX, centerY + avatarRadius + 60);
+  ctx.fillText(`¡Felicidades ${winnerTag}!`, centerX, centerY - avatarRadius - 38);
 
-  ctx.font = "40px Segoe UI, Arial";
-  ctx.fillStyle = "#FFD700";
-  ctx.fillText(winnerTag, centerX, centerY + avatarRadius + 110);
-
-  // Mensaje campeón
-  ctx.font = "28px Segoe UI, Arial";
+  // Mensaje campeón debajo de la imagen
+  ctx.font = "22px Segoe UI, Arial";
   ctx.fillStyle = "#fff";
-  ctx.fillText("¡Eres el campeón!", centerX, centerY + avatarRadius + 160);
+  ctx.fillText("¡Eres el campeón!", centerX, centerY + avatarRadius + 46);
 
-  // Instagram/tag
-  ctx.font = "26px Segoe UI, Arial";
+  // Instagram/tag pequeño más abajo
+  ctx.font = "22px Segoe UI, Arial";
   ctx.fillStyle = "#FFD700";
-  ctx.fillText("@peleadeseguidores", centerX, gameSize.h - 38);
+  ctx.fillText("@peleadeseguidores", centerX, centerY + avatarRadius + 84);
 }
 
 window.onload = () => {};
