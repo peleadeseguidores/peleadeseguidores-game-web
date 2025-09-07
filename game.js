@@ -1,4 +1,4 @@
-// Animación suave de tamaño + canvas ocupa toda la página + demás mejoras
+// Animación suave de tamaño + canvas vertical + pantalla final vertical + sin botón configurar
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -24,15 +24,25 @@ let gameSize = {w:window.innerWidth, h:window.innerHeight};
 let globalSpeed = parseFloat(speedInput.value) || 0.74;
 let globalLives = 8;
 
-// --- Responsive canvas ---
-function resizeCanvas() {
-  gameSize.w = window.innerWidth;
-  gameSize.h = window.innerHeight;
-  canvas.width = gameSize.w;
-  canvas.height = gameSize.h;
+// --- Canvas vertical para Instagram/Reels/Stories ---
+function resizeCanvasInstagram() {
+  let W = window.innerWidth;
+  let H = window.innerHeight;
+  let ratio = 9/16;
+  if (W / H > ratio) {
+    W = H * ratio;
+  } else {
+    H = W / ratio;
+  }
+  canvas.width = W;
+  canvas.height = H;
+  gameSize.w = W;
+  gameSize.h = H;
+  canvas.style.width = W + "px";
+  canvas.style.height = H + "px";
 }
-window.addEventListener("resize", resizeCanvas);
-resizeCanvas();
+window.addEventListener("resize", resizeCanvasInstagram);
+resizeCanvasInstagram();
 
 // --- UI listeners ---
 document.getElementById("botsCount").addEventListener("change", e => {
@@ -189,7 +199,7 @@ function showPreview() {
 
 // --- JUEGO PRINCIPAL ---
 function startGame() {
-  resizeCanvas();
+  resizeCanvasInstagram();
   let allPlayers = [...playerConfig];
   if (botsCount > 0 && botImageDataURL) {
     for(let i=0; i<botsCount; i++) {
@@ -259,7 +269,6 @@ class Player {
 
   // Animación suave del tamaño
   growTo(newSize) {
-    // Interpolación suave (más lento si la diferencia es grande)
     this.size += (newSize - this.size) * 0.05;
     this.targetSize = newSize;
   }
@@ -341,9 +350,8 @@ class Player {
 // --- COLISIONES Y CRECIMIENTO NATURAL ---
 function handleCollisions() {
   let N = players.length;
-  let minSize = 18, maxSize = Math.min(gameSize.w, gameSize.h) * 0.08; // escala a pantalla
+  let minSize = 18, maxSize = Math.min(gameSize.w, gameSize.h) * 0.21; // escala a pantalla, más grande para vertical
   let total = playerConfig.length + botsCount;
-  // Tamaño crece visualmente al irse eliminando jugadores (proporcional)
   let frac = Math.min(1, (total-N)/(total*0.85));
   let newSize = minSize + (maxSize-minSize) * frac;
   for(let i=0; i<N; i++){
@@ -401,10 +409,11 @@ function gameLoop(ts){
   }
   handleCollisions();
 
-  ctx.font = "21px Segoe UI, Arial, sans-serif";
+  // "Vivos" centrado arriba
+  ctx.font = "36px Segoe UI, Arial, sans-serif";
   ctx.fillStyle = "#FFD700";
-  ctx.textAlign = "left";
-  ctx.fillText(`Vivos: ${players.length}`, 32, 38);
+  ctx.textAlign = "center";
+  ctx.fillText(`Vivos: ${players.length}`, gameSize.w/2, 48);
 
   if(running !== false && players.length>1){
     requestAnimationFrame(gameLoop);
@@ -413,38 +422,50 @@ function gameLoop(ts){
   }
 }
 
-// --- GANADOR: IMAGEN CIRCULAR + MENSAJE ---
+// --- GANADOR: IMAGEN CIRCULAR + MENSAJE VERTICAL INSTAGRAM ---
 function showWinner(winner){
   ctx.clearRect(0,0,gameSize.w,gameSize.h);
   ctx.fillStyle = "#111";
   ctx.fillRect(0, 0, gameSize.w, gameSize.h);
 
+  // Imagen circular grande centrada vertical
+  let centerX = gameSize.w / 2;
+  let centerY = gameSize.h / 2 - 120;
+  let avatarRadius = Math.min(gameSize.w, gameSize.h) * 0.22;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, avatarRadius, 0, 2*Math.PI);
+  ctx.closePath();
+  ctx.clip();
+  if (winner.imgLoaded && winner.img) {
+    ctx.drawImage(winner.img, centerX-avatarRadius, centerY-avatarRadius, avatarRadius*2, avatarRadius*2);
+  } else {
+    ctx.fillStyle = "#777";
+    ctx.fillRect(centerX-avatarRadius, centerY-avatarRadius, avatarRadius*2, avatarRadius*2);
+  }
+  ctx.restore();
+
+  // Nombre ganador (grande, centrado debajo del avatar)
   let winnerTag = winner.name.startsWith('@') ? winner.name : '@' + winner.name;
   ctx.font = "54px Segoe UI, Arial, sans-serif";
   ctx.fillStyle = "#FFD700";
   ctx.textAlign = "center";
-  ctx.fillText(`¡Felicidades ${winnerTag}!`, gameSize.w/2, 120);
+  ctx.fillText(`¡Felicidades!`, centerX, centerY + avatarRadius + 60);
 
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(gameSize.w/2, gameSize.h/2, 140, 0, 2*Math.PI);
-  ctx.closePath();
-  ctx.clip();
-  if (winner.imgLoaded && winner.img) {
-    ctx.drawImage(winner.img, gameSize.w/2-140, gameSize.h/2-140, 280, 280);
-  } else {
-    ctx.fillStyle = "#777";
-    ctx.fillRect(gameSize.w/2-140, gameSize.h/2-140, 280, 280);
-  }
-  ctx.restore();
+  ctx.font = "40px Segoe UI, Arial";
+  ctx.fillStyle = "#FFD700";
+  ctx.fillText(winnerTag, centerX, centerY + avatarRadius + 110);
 
+  // Mensaje campeón
   ctx.font = "28px Segoe UI, Arial";
   ctx.fillStyle = "#fff";
-  ctx.fillText("¡Eres el campeón!", gameSize.w/2, gameSize.h/2 + 180);
+  ctx.fillText("¡Eres el campeón!", centerX, centerY + avatarRadius + 160);
 
+  // Instagram/tag
   ctx.font = "26px Segoe UI, Arial";
   ctx.fillStyle = "#FFD700";
-  ctx.fillText("@peleadeseguidores", gameSize.w/2, gameSize.h/2 + 228);
+  ctx.fillText("@peleadeseguidores", centerX, gameSize.h - 38);
 }
 
 window.onload = () => {};
